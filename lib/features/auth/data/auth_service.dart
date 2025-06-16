@@ -2,14 +2,19 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../domain/user_model.dart';
+import 'package:flutter/material.dart';
+import '../domain/badge_model.dart';
 
 class AuthService {
   static const _baseUrl = 'http://10.0.2.2:8080'; // TODO: Config dosyasından al
   static const _loginEndpoint = '/api/auth/login';
   static const _registerEndpoint = '/api/auth/register';
   static const _userMeEndpoint = '/api/users/me';
+  static const _refreshTokenEndpoint = '/api/auth/refresh'; // TODO: Backend'de refresh token endpoint'i ekle
+  static const _badgesDetailedEndpoint = '/api/gamification/badges/detailed';
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   Future<String?> login(String username, String password) async {
     final url = Uri.parse('$_baseUrl$_loginEndpoint');
@@ -23,15 +28,13 @@ class AuthService {
           'password': password,
         }),
       );
-      print('Login yanıtı: \\${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final token = data['token'];
         await _storage.write(key: 'jwt', value: token);
-        print('JWT token: $token');
         return null; // null = başarılı giriş
       } else {
-        // Backend'den dönen hata mesajını göster
         try {
           final data = jsonDecode(response.body);
           if (data is Map && data['message'] != null) {
@@ -79,7 +82,13 @@ class AuthService {
       if (response.statusCode == 200) {
         return null; // başarılı kayıt
       } else {
-        return 'Kayıt başarısız: ${response.body}';
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data['message'] != null) {
+            return data['message'];
+          }
+        } catch (_) {}
+        return 'Kayıt başarısız';
       }
     } catch (e) {
       return 'Kayıt sırasında bir hata oluştu: $e';
@@ -88,31 +97,44 @@ class AuthService {
 
   Future<UserModel?> getCurrentUser() async {
     String? token = await _storage.read(key: 'jwt');
-    if (token == null) return null;
+    if (token == null) {
+      _redirectToLogin();
+      return null;
+    }
+
     final url = Uri.parse('$_baseUrl$_userMeEndpoint');
-    final response = await http.get(url, headers: {
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    });
-    print('getCurrentUser status: ${response.statusCode}');
-    print('getCurrentUser body: ${response.body}');
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return UserModel.fromJson(data);
-    } else {
-      print('Kullanıcı bilgileri alınamadı: ${response.body}');
+    } else if (response.statusCode == 401) {
+      // Token geçersiz, kullanıcıyı login sayfasına yönlendir
+      await _storage.delete(key: 'jwt');
+      _redirectToLogin();
     }
     return null;
   }
 
   Future<bool> updateCurrentUser({required String fullName, String? password}) async {
     final token = await _storage.read(key: 'jwt');
-    if (token == null) return false;
+    if (token == null) {
+      _redirectToLogin();
+      return false;
+    }
+
     final url = Uri.parse('$_baseUrl$_userMeEndpoint');
     final body = {
       'fullName': fullName,
       if (password != null && password.isNotEmpty) 'password': password,
     };
+
     final response = await http.put(
       url,
       headers: {
@@ -121,9 +143,72 @@ class AuthService {
       },
       body: jsonEncode(body),
     );
-    if (response.statusCode != 200) {
-      print('Kullanıcı bilgileri güncellenirken hata oluştu: ${response.body}');
+
+    if (response.statusCode == 401) {
+      await _storage.delete(key: 'jwt');
+      _redirectToLogin();
+      return false;
     }
+
+    return response.statusCode == 200;
+  }
+
+  void _redirectToLogin() {
+    if (navigatorKey.currentContext != null) {
+      Navigator.of(navigatorKey.currentContext!).pushNamedAndRemoveUntil(
+        '/login',
+        (route) => false,
+      );
+    }
+  }
+
+  Future<void> logout() async {
+    await _storage.delete(key: 'jwt');
+    _redirectToLogin();
+  }
+
+  Future<List<BadgeModel>> getUserBadgesDetailed() async {
+    String? token = await _storage.read(key: 'jwt');
+    if (token == null) {
+      _redirectToLogin();
+      return [];
+    }
+    final url = Uri.parse('$_baseUrl$_badgesDetailedEndpoint');
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => BadgeModel.fromJson(e)).toList();
+    } else if (response.statusCode == 401) {
+      await _storage.delete(key: 'jwt');
+      _redirectToLogin();
+    }
+    return [];
+  }
+
+  Future<bool> verifyCurrentPassword(String password) async {
+    String? token = await _storage.read(key: 'jwt');
+    if (token == null) {
+      _redirectToLogin();
+      return false;
+    }
+    // Kullanıcı adını almak için mevcut kullanıcıyı çek
+    final user = await getCurrentUser();
+    if (user == null) return false;
+    final url = Uri.parse('$_baseUrl$_loginEndpoint');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'username': user.username,
+        'password': password,
+      }),
+    );
     return response.statusCode == 200;
   }
 }

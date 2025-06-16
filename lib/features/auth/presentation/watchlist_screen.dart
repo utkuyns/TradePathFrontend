@@ -9,6 +9,7 @@ import 'portfolio.dart';
 import 'trade_screen.dart';
 import 'profile_screen.dart';
 import '../data/auth_service.dart';
+import 'homepage.dart'; // HomeService ve MiniChartPainter için
 
 class WatchlistService {
   static const _baseUrl = 'http://10.0.2.2:8080';
@@ -90,7 +91,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
   void _refreshWatchlist() {
     setState(() {
-      _watchlistFuture = WatchlistService().fetchWatchlist();
+      _watchlistFuture = HomeService().fetchWatchlistWithSparklines();
     });
   }
 
@@ -294,7 +295,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                               ],
                             ),
                           ),
-                          // Fiyat grafiği (basit bir çizgi olarak)
+                          // Fiyat grafiği (gerçek sparkline olarak)
                           Container(
                             width: 80,
                             height: 30,
@@ -303,9 +304,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: CustomPaint(
-                              painter: SimpleChartPainter(
+                              painter: MiniChartPainter(
+                                data: item.sparkline,
                                 color: isPositive ? Colors.green : Colors.red,
-                                isUp: isPositive,
                               ),
                             ),
                           ),

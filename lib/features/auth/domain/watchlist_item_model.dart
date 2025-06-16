@@ -1,9 +1,10 @@
 class WatchlistItemModel {
   final String symbol;
   final String companyName;
-  final double currentPrice;
-  final double priceChange;
-  final double priceChangePercentage;
+  double currentPrice;
+  double priceChange;
+  double priceChangePercentage;
+  final List<double> sparkline;
 
   WatchlistItemModel({
     required this.symbol,
@@ -11,6 +12,7 @@ class WatchlistItemModel {
     required this.currentPrice,
     required this.priceChange,
     required this.priceChangePercentage,
+    required this.sparkline,
   });
 
   factory WatchlistItemModel.fromJson(Map<String, dynamic> json) {
@@ -28,6 +30,7 @@ class WatchlistItemModel {
       currentPrice: safeDouble(json['currentPrice']),
       priceChange: safeDouble(json['priceChange']),
       priceChangePercentage: safeDouble(json['priceChangePercentage']),
+      sparkline: [], // fromJson ile gelmiyor, ayrı çekilecek
     );
   }
 } 

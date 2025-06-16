@@ -7,6 +7,7 @@ import '../data/auth_service.dart';
 import 'trade_screen.dart';
 import 'profile_screen.dart';
 import 'homepage.dart';
+import 'package:lottie/lottie.dart';
 
 class NetWorthModel {
   final double virtualBalance;
@@ -112,6 +113,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   late Future<NetWorthModel> _netWorthFuture;
   int _selectedIndex = 1;
   Map<String, double> _buyPrices = {};
+  bool _expanded = false;
 
   @override
   void initState() {
@@ -173,12 +175,21 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     final Color boxColor = const Color(0xFFE9EAF3);
     final Color cardGradientStart = const Color(0xFFEDF0FF);
     final Color cardGradientEnd = const Color(0xFFFFFFFF);
+    final Color cardBg = const Color(0xFFF7F8FA); // Soft arka plan rengi
     return Scaffold(
       backgroundColor: secondaryColor,
       appBar: AppBar(
         title: Row(
           children: [
-            Icon(Icons.pie_chart_rounded, color: primaryColor, size: 28),
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: Lottie.asset(
+                'assets/animations/piechart.json',
+                repeat: true,
+                fit: BoxFit.contain,
+              ),
+            ),
             const SizedBox(width: 10),
             const Text('Portfolio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
           ],
@@ -207,130 +218,241 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
-                    // Tam simetrik üçlü kutu
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 18),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [primaryColor.withOpacity(0.12), cardGradientEnd],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: primaryColor.withOpacity(0.08),
-                            blurRadius: 16,
-                            offset: const Offset(0, 8),
+                    // Modern ve şık 3 değerli özet kutusu
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 2.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF7F8FA),
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.indigo[800]!.withOpacity(0.38),
+                                    blurRadius: 28,
+                                    spreadRadius: 2,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Portfolio', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    netWorth.portfolioValue.toStringAsFixed(2),
+                                    style: TextStyle(fontSize: 20, color: Colors.indigo[700], fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text('Stock Value', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF7F8FA),
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.green[800]!.withOpacity(0.38),
+                                    blurRadius: 28,
+                                    spreadRadius: 2,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Cash', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    netWorth.virtualBalance.toStringAsFixed(2),
+                                    style: TextStyle(fontSize: 20, color: Colors.green[700], fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text('Available Balance', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF7F8FA),
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.blue[800]!.withOpacity(0.38),
+                                    blurRadius: 28,
+                                    spreadRadius: 2,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Total', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    netWorth.netWorth.toStringAsFixed(2),
+                                    style: TextStyle(fontSize: 20, color: Colors.blue[800], fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text('Total Assets', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: _symmetricValueCard(
-                                label: 'Cash',
-                                value: netWorth.virtualBalance,
-                                color: Colors.green[700]!,
-                                subtitle: 'Available Balance',
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _symmetricValueCard(
-                                label: 'Portfolio',
-                                value: netWorth.portfolioValue,
-                                color: primaryColor,
-                                subtitle: 'Stock Value',
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _symmetricValueCard(
-                                label: 'Total',
-                                value: netWorth.netWorth,
-                                color: Colors.blue[800]!,
-                                subtitle: 'Total Assets',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
+                    const SizedBox(height: 22),
                     // Tablo başlığı
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
                       decoration: BoxDecoration(
-                        color: boxColor,
+                        color: boxColor.withOpacity(0.85),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
-                        children: const [
-                          SizedBox(width: 36),
-                          Expanded(flex: 2, child: Text('Symbol', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                          Expanded(flex: 3, child: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                          Expanded(flex: 2, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                          Expanded(flex: 2, child: Text('Buy Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                          Expanded(flex: 2, child: Text('Current Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                        children: [
+                          Expanded(flex: 4, child: Text('Symbol', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+                          Expanded(flex: 2, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                          Expanded(flex: 3, child: Text('Avg. Cost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                          Expanded(flex: 3, child: Text('Current', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                          Expanded(flex: 2, child: Text('%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 10),
                     // Liste
                     Expanded(
                       child: ListView.separated(
                         itemCount: items.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final item = items[index];
                           final buyPrice = _buyPrices[item.symbol] ?? 0.0;
+                          final double currentPrice = item.currentPrice;
+                          final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
+                          Color percentColor;
+                          if (changePercent > 0) {
+                            percentColor = Colors.green;
+                          } else if (changePercent < 0) {
+                            percentColor = Colors.red;
+                          } else {
+                            percentColor = Colors.amber[700]!;
+                          }
                           return Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: index % 2 == 0
-                                    ? [cardGradientStart, cardGradientEnd]
-                                    : [cardGradientEnd, cardGradientStart],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.04),
+                                  color: Colors.black.withOpacity(0.05),
                                   blurRadius: 8,
-                                  offset: const Offset(0, 4),
+                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-                              child: Row(
-                                children: [
-                                  // Avatar veya logo
-                                  CircleAvatar(
-                                    backgroundColor: primaryColor.withOpacity(0.15),
-                                    child: Text(
-                                      item.symbol.isNotEmpty ? item.symbol[0] : '?',
-                                      style: TextStyle(
-                                        color: primaryColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
+                            child: Row(
+                              children: [
+                                // Symbol + şirket adı
+                                Expanded(
+                                  flex: 4,
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: primaryColor.withOpacity(0.16),
+                                        child: Text(
+                                          item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                                          style: TextStyle(
+                                            color: primaryColor,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        radius: 16,
                                       ),
-                                    ),
-                                    radius: 18,
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.symbol,
+                                              style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                            Text(
+                                              item.companyName,
+                                              style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(flex: 2, child: Text(item.symbol, style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16))),
-                                  Expanded(flex: 3, child: Text(item.companyName, style: TextStyle(color: textColor.withOpacity(0.85), fontSize: 15))),
-                                  Expanded(flex: 2, child: Text(item.quantity.toString(), style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 15))),
-                                  Expanded(flex: 2, child: Text(buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}', style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 15))),
-                                  Expanded(flex: 2, child: Text('\$${item.currentPrice.toStringAsFixed(2)}', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 15))),
-                                ],
-                              ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    '${item.quantity}',
+                                    style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}',
+                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 14),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    '\$${item.currentPrice.toStringAsFixed(2)}',
+                                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    alignment: Alignment.center,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: percentColor.withOpacity(0.16),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
+                                      style: TextStyle(color: percentColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         },
@@ -379,15 +501,15 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
   Widget _symmetricValueCard({required String label, required double value, required Color color, required String subtitle}) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -398,29 +520,29 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 15,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               color: Colors.grey,
-              letterSpacing: 0.2,
+              letterSpacing: 0.1,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 3),
           Text(
-            '\$ ${value.toStringAsFixed(2)}',
+            value.toStringAsFixed(2),
             style: TextStyle(
-              fontSize: 24,
+              fontSize: 15,
               fontWeight: FontWeight.bold,
               color: color,
-              letterSpacing: 1.1,
+              letterSpacing: 0.5,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 2),
           Text(
             subtitle,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 9,
               color: Colors.black54,
               fontWeight: FontWeight.w400,
             ),
@@ -431,3 +553,4 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     );
   }
 }
+

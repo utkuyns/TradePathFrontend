@@ -188,6 +188,57 @@ class HomeService {
       ];
     }
   }
+
+  Future<List<double>> fetchSparkline(String symbol) async {
+    final token = await _storage.read(key: 'jwt');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/intraday/$symbol'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    try {
+      final data = jsonDecode(response.body);
+      if (data is List) {
+        return data.take(20).map((e) => (e['close'] as num).toDouble()).toList().reversed.toList();
+      } else {
+        // Eğer string mesaj dönerse (ör: 'No intraday data found...')
+        return [];
+      }
+    } catch (e) {
+      // JSON parse hatası veya başka bir hata olursa boş dön
+      return [];
+    }
+  }
+
+  Future<List<WatchlistItemModel>> fetchWatchlistWithSparklines() async {
+    final watchlist = await fetchWatchlist();
+    for (final item in watchlist) {
+      final sparkline = await fetchSparkline(item.symbol);
+      item.sparkline.clear();
+      item.sparkline.addAll(sparkline);
+      if (sparkline.length >= 2) {
+        final currentPrice = sparkline[0];
+        final previousPrice = sparkline[1];
+        item.currentPrice = currentPrice;
+        item.priceChange = currentPrice - previousPrice;
+        item.priceChangePercentage = previousPrice != 0 ? ((currentPrice - previousPrice) / previousPrice) * 100 : 0.0;
+      } else if (sparkline.isNotEmpty) {
+        item.currentPrice = sparkline[0];
+        item.priceChange = 0.0;
+        item.priceChangePercentage = 0.0;
+      } else {
+        item.currentPrice = 0.0;
+        item.priceChange = 0.0;
+        item.priceChangePercentage = 0.0;
+      }
+    }
+    return watchlist;
+  }
 }
 
 class HomeScreen extends StatefulWidget {
@@ -213,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _refreshData() {
     setState(() {
-      _watchlistFuture = HomeService().fetchWatchlist();
+      _watchlistFuture = HomeService().fetchWatchlistWithSparklines();
       _stockGainsFuture = HomeService().fetchStockGains();
       _userNameFuture = HomeService().fetchUserName();
       _portfolioFuture = HomeService().fetchPortfolio();
@@ -534,11 +585,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               itemCount: items.length,
                               itemBuilder: (context, index) {
                                 final item = items[index];
-                                final isPositive = item.currentPrice > item.purchasePrice;
-                                final changePercentage = item.purchasePrice > 0
-                                    ? ((item.currentPrice - item.purchasePrice) / item.purchasePrice) * 100
+                                final double currentPrice = item.currentPrice;
+                                final double purchasePrice = item.purchasePrice;
+                                final bool isPositive = currentPrice > purchasePrice;
+                                final double changePercentage = purchasePrice > 0
+                                    ? ((currentPrice - purchasePrice) / purchasePrice) * 100
                                     : 0.0;
-                                
                                 return Container(
                                   width: MediaQuery.of(context).size.width * 0.43, // Ekranın yaklaşık yarısı kadar genişlik
                                   margin: EdgeInsets.only(
@@ -547,7 +599,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: _buildStockCard(
                                     symbol: item.symbol,
                                     name: item.companyName,
-                                    price: item.currentPrice,
+                                    price: currentPrice,
                                     change: changePercentage,
                                     isPositive: isPositive,
                                     logo: 'assets/${item.symbol.toLowerCase()}_logo.png',
@@ -692,6 +744,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: primaryColor,
+                                      foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                     ),
@@ -715,6 +768,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               isPositive: item.priceChange > 0,
                               logo: 'assets/${item.symbol.toLowerCase()}_logo.png',
                               color: _getColorForSymbol(item.symbol),
+                              sparkline: item.sparkline,
                             )).toList(),
                           );
                         },
@@ -852,6 +906,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isPositive,
     required String logo,
     required Color color,
+    required List<double> sparkline,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -910,9 +965,9 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: CustomPaint(
-              painter: SimpleChartPainter(
+              painter: MiniChartPainter(
+                data: sparkline,
                 color: isPositive ? Colors.green : Colors.red,
-                isUp: isPositive,
               ),
             ),
           ),
@@ -1048,45 +1103,35 @@ class ChartPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-class SimpleChartPainter extends CustomPainter {
+class MiniChartPainter extends CustomPainter {
+  final List<double> data;
   final Color color;
-  final bool isUp;
 
-  SimpleChartPainter({required this.color, required this.isUp});
+  MiniChartPainter({required this.data, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
     final paint = Paint()
       ..color = color
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
-    final path = Path();
-    
-    if (isUp) {
-      path.moveTo(0, size.height * 0.8);
-      path.quadraticBezierTo(
-        size.width * 0.2, size.height * 0.5,
-        size.width * 0.4, size.height * 0.7
-      );
-      path.quadraticBezierTo(
-        size.width * 0.6, size.height * 0.9,
-        size.width * 0.8, size.height * 0.2
-      );
-      path.lineTo(size.width, size.height * 0.4);
-    } else {
-      path.moveTo(0, size.height * 0.2);
-      path.quadraticBezierTo(
-        size.width * 0.2, size.height * 0.4,
-        size.width * 0.4, size.height * 0.3
-      );
-      path.quadraticBezierTo(
-        size.width * 0.6, size.height * 0.2,
-        size.width * 0.8, size.height * 0.8
-      );
-      path.lineTo(size.width, size.height * 0.6);
-    }
+    final double xStep = size.width / (data.length - 1);
+    final double maxValue = data.reduce((a, b) => a > b ? a : b);
+    final double minValue = data.reduce((a, b) => a < b ? a : b);
+    final double range = maxValue - minValue == 0 ? 1 : maxValue - minValue;
 
+    final path = Path();
+    for (int i = 0; i < data.length; i++) {
+      final x = i * xStep;
+      final y = size.height - ((data[i] - minValue) / range) * size.height;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
     canvas.drawPath(path, paint);
   }
 

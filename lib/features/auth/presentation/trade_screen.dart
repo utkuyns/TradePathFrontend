@@ -136,6 +136,40 @@ class _TradeScreenState extends State<TradeScreen> {
         SnackBar(content: Text(isBuy ? 'Alım başarılı!' : 'Satış başarılı!')),
       );
       _fetchUserBalance();
+      final data = jsonDecode(response.body);
+      if (data['newBadge'] != null) {
+        final badge = data['newBadge'];
+        IconData iconData;
+        Color color;
+        switch (badge['code']) {
+          case 'FIRST_TRADE':
+            iconData = Icons.emoji_events;
+            color = Color(0xFF4CAF50);
+            break;
+          case 'NETWORTH_1K':
+            iconData = Icons.attach_money;
+            color = Color(0xFF2196F3);
+            break;
+          case 'PORTFOLIO_3_STOCKS':
+            iconData = Icons.auto_graph;
+            color = Color(0xFF2196F3);
+            break;
+          case 'EDUCATION_MASTER':
+            iconData = Icons.school;
+            color = Color(0xFF4CAF50);
+            break;
+          default:
+            iconData = Icons.star_border_rounded;
+            color = Color(0xFFB0BEC5);
+        }
+        showAchievementUnlocked(
+          context,
+          badge['title'] ?? 'Achievement',
+          badge['description'] ?? '',
+          iconData,
+          color,
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('İşlem başarısız: ${response.body}')),
@@ -490,4 +524,61 @@ class _TradeScreenState extends State<TradeScreen> {
       ),
     );
   }
+}
+
+void showAchievementUnlocked(BuildContext context, String title, String description, IconData icon, Color color) {
+  final overlay = Overlay.of(context);
+  final overlayEntry = OverlayEntry(
+    builder: (context) => Positioned(
+      top: 60,
+      left: 24,
+      right: 24,
+      child: Material(
+        color: Colors.transparent,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [color.withOpacity(0.95), color.withOpacity(0.7)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.18),
+                blurRadius: 18,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Icon(icon, color: color, size: 28),
+                radius: 26,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Achievement Unlocked!', style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
+                    const SizedBox(height: 2),
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(description, style: const TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  overlay.insert(overlayEntry);
+  Future.delayed(const Duration(seconds: 3), () => overlayEntry.remove());
 }
