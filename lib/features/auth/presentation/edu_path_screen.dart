@@ -3,6 +3,7 @@ import '../data/lesson_service.dart';
 import '../domain/lesson_model.dart';
 import 'package:flutter/services.dart';
 import 'package:card_swiper/card_swiper.dart';
+import 'package:collection/collection.dart';
 
 class EduPathScreen extends StatefulWidget {
   const EduPathScreen({Key? key}) : super(key: key);
@@ -13,7 +14,6 @@ class EduPathScreen extends StatefulWidget {
 
 class _EduPathScreenState extends State<EduPathScreen> {
   static const int totalSteps = 10;
-  int unlockedStep = 1;
   static const Color appBarBlue = Color(0xFF7FBBBF);
   late Future<List<LessonModel>> _lessonsFuture;
   final LessonService _lessonService = LessonService();
@@ -23,6 +23,9 @@ class _EduPathScreenState extends State<EduPathScreen> {
   bool _isQuizSubmitted = false;
   bool _showFlashcard = false;
   int _selectedStep = 1;
+  LessonModel? _selectedLessonDetail;
+  bool _isLoadingLessonDetail = false;
+  List<QuizQuestion>? _currentQuizQuestions;
 
   // Node positions based on user-provided pixel coordinates (image size: 1080x1440), each moved 200px up on y-axis
   static const List<Offset> nodePositions = [
@@ -41,23 +44,79 @@ class _EduPathScreenState extends State<EduPathScreen> {
   @override
   void initState() {
     super.initState();
-    _lessonsFuture = _lessonService.fetchLessons();
+    _lessonsFuture = _lessonService.fetchLessonsWithProgress();
   }
 
-  void _openFlashcard(int step) {
+  void _openFlashcard(int step) async {
+    final lessons = await _lessonsFuture;
+    final lesson = lessons.firstWhereOrNull((l) => l.orderNumber == step);
+    if (lesson == null) return;
+    if (step != 1 && !lesson.isUnlocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This lesson is locked. Please complete previous lessons.')),
+      );
+      return;
+    }
     setState(() {
+      _isLoadingLessonDetail = true;
       _showFlashcard = true;
       _selectedStep = step;
-      _currentLessonIndex = (step - 1) * 3; // örnek: her adımda 3 lesson var varsayımı
+      _currentLessonIndex = step - 1;
       _quizAnswers = [];
       _isQuizSubmitted = false;
+      _selectedLessonDetail = null;
+    });
+    // Detaylı dersi çek
+    final detail = await _lessonService.fetchLessonDetail(lesson.id);
+    // Eğer ders tamamlandıysa ve quiz varsa quiz sorularını çek
+    List<QuizQuestion>? quizQuestions;
+    if (detail.isCompleted && detail.hasQuiz) {
+      quizQuestions = await _lessonService.fetchLessonQuiz(detail.id);
+    }
+    setState(() {
+      _selectedLessonDetail = detail;
+      _isLoadingLessonDetail = false;
+      _currentQuizQuestions = quizQuestions;
     });
   }
 
   void _closeFlashcard() {
     setState(() {
       _showFlashcard = false;
+      _selectedLessonDetail = null;
     });
+  }
+
+  void _markLessonAsCompleted() async {
+    final lessons = await _lessonsFuture;
+    final currentLesson = lessons.firstWhere((l) => l.orderNumber == _selectedStep);
+    // Quiz kontrolünü kaldırıyoruz, önce dersi tamamla
+    final success = await _lessonService.markLessonAsCompleted(currentLesson.id);
+    if (success) {
+      setState(() {
+        _isLoadingLessonDetail = true;
+      });
+      final newLessons = await _lessonService.fetchLessonsWithProgress();
+      // Eğer dersin quiz'i varsa, quiz sorularını çek ve modalda göster
+      List<QuizQuestion>? quizQuestions;
+      if (currentLesson.hasQuiz) {
+        quizQuestions = await _lessonService.fetchLessonQuiz(currentLesson.id);
+      }
+      setState(() {
+        _lessonsFuture = Future.value(newLessons);
+        _showFlashcard = currentLesson.hasQuiz; // Quiz varsa modal açık kalsın
+        _selectedLessonDetail = newLessons.firstWhere((l) => l.orderNumber == _selectedStep);
+        _isLoadingLessonDetail = false;
+        _currentQuizQuestions = quizQuestions;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lesson completed successfully!')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lesson could not be completed. Please try again.')),
+      );
+    }
   }
 
   @override
@@ -99,22 +158,54 @@ class _EduPathScreenState extends State<EduPathScreen> {
               fit: BoxFit.cover,
             ),
           ),
-          ...List.generate(totalSteps, (i) {
-            final step = i + 1;
-            final isActive = step == 1 || step <= unlockedStep;
-            final pos = nodePositions[i];
-            return Positioned(
-              left: pos.dx * width - 32,
-              top: pos.dy * height - 32,
-              child: GestureDetector(
-                onTap: isActive ? () => _openFlashcard(step) : null,
-                child: NodeWidget(
-                  isActive: isActive,
-                  isFirst: step == 1,
-                ),
-              ),
-            );
-          }),
+          FutureBuilder<List<LessonModel>>(
+            future: _lessonsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('Bir hata oluştu: ${snapshot.error}'));
+              }
+              
+              final lessons = snapshot.data ?? [];
+              return Stack(
+                children: [
+                  ...List.generate(totalSteps, (i) {
+                    final step = i + 1;
+                    final lesson = lessons.firstWhere(
+                      (l) => l.orderNumber == step,
+                      orElse: () => LessonModel(
+                        id: 0,
+                        title: '',
+                        content: '',
+                        orderNumber: step,
+                        isUnlocked: step == 1,
+                        isCompleted: false,
+                        hasQuiz: false,
+                      ),
+                    );
+                    final isUnlocked = step == 1 ? true : lesson.isUnlocked;
+                    final isCompleted = lesson.isCompleted;
+                    final hasQuiz = lesson.hasQuiz;
+                    final pos = nodePositions[i];
+                    return Positioned(
+                      left: pos.dx * width - 32,
+                      top: pos.dy * height - 32,
+                      child: GestureDetector(
+                        onTap: (lesson.id != 0 && isUnlocked) ? () => _openFlashcard(step) : null,
+                        child: NodeWidget(
+                          isActive: isUnlocked,
+                          isCompleted: isCompleted,
+                          hasQuiz: hasQuiz,
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              );
+            },
+          ),
           if (_showFlashcard)
             Positioned.fill(
               child: GestureDetector(
@@ -123,87 +214,59 @@ class _EduPathScreenState extends State<EduPathScreen> {
                   color: Colors.black.withOpacity(0.35),
                   child: Center(
                     child: GestureDetector(
-                      onTap: () {}, // kartın kendisine tıklanınca kapanmasın diye
+                      onTap: () {},
                       child: SizedBox(
                         width: width * 0.92,
                         height: height * 0.75,
-                        child: FutureBuilder<List<LessonModel>>(
-                          future: _lessonsFuture,
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const Center(child: CircularProgressIndicator());
-                            }
-                            if (snapshot.hasError) {
-                              return Center(child: Text('Bir hata oluştu: ${snapshot.error}'));
-                            }
-                            final lessons = snapshot.data ?? [];
-                            // Her step için 3 lesson örneği, istersen burayı backend'e göre ayarlayabilirsin
-                            final start = (_selectedStep - 1) * 3;
-                            final end = (_selectedStep) * 3;
-                            final stepLessons = lessons.length >= end
-                                ? lessons.sublist(start, end)
-                                : lessons.sublist(start);
-                            if (stepLessons.isEmpty) {
-                              return const Center(child: Text('Ders bulunamadı.'));
-                            }
-                            return Card(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                              elevation: 8,
-                              color: Colors.white.withOpacity(0.97),
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Swiper(
-                                  controller: _swiperController,
-                                  itemCount: stepLessons.length,
-                                  itemBuilder: (context, index) {
-                                    final lesson = stepLessons[index];
-                                    if (lesson.isQuiz) {
-                                      return _buildQuizCard(lesson, ScrollController());
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.all(16.0),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            lesson.title,
-                                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Expanded(
-                                            child: SingleChildScrollView(
-                                              child: Builder(
-                                                builder: (context) {
-                                                  print('Lesson: \\${lesson.title} | Content: \\${lesson.content}');
-                                                  return Text(
-                                                    (lesson.content != null && lesson.content.trim().isNotEmpty)
-                                                        ? lesson.content
-                                                        : 'İçerik bulunamadı.',
-                                                    style: const TextStyle(fontSize: 16, height: 1.5),
-                                                  );
-                                                },
+                        child: _isLoadingLessonDetail
+                            ? const Center(child: CircularProgressIndicator())
+                            : _selectedLessonDetail == null
+                                ? const Center(child: Text('Ders bulunamadı.'))
+                                : (_selectedLessonDetail!.isCompleted && _selectedLessonDetail!.hasQuiz && _currentQuizQuestions != null)
+                                    ? QuizWidget(questions: _currentQuizQuestions!)
+                                    : Card(
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                                        elevation: 8,
+                                        color: Colors.white.withOpacity(0.97),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Column(
+                                            children: [
+                                              Expanded(
+                                                child: SingleChildScrollView(
+                                                  padding: const EdgeInsets.all(16.0),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        _selectedLessonDetail!.title,
+                                                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                                      ),
+                                                      const SizedBox(height: 16),
+                                                      Text(
+                                                        _selectedLessonDetail!.content,
+                                                        style: const TextStyle(fontSize: 16, height: 1.5),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
                                               ),
-                                            ),
+                                              if (!_selectedLessonDetail!.isCompleted)
+                                                Padding(
+                                                  padding: const EdgeInsets.all(16.0),
+                                                  child: ElevatedButton(
+                                                    onPressed: _markLessonAsCompleted,
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: appBarBlue,
+                                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                                    ),
+                                                    child: const Text('Complete Lesson', style: TextStyle(fontSize: 16)),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
-                                        ],
+                                        ),
                                       ),
-                                    );
-                                  },
-                                  onIndexChanged: (index) {
-                                    setState(() {
-                                      _currentLessonIndex = index;
-                                      _quizAnswers = [];
-                                      _isQuizSubmitted = false;
-                                    });
-                                  },
-                                  loop: false,
-                                  pagination: const SwiperPagination(),
-                                  control: const SwiperControl(),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
                       ),
                     ),
                   ),
@@ -214,101 +277,26 @@ class _EduPathScreenState extends State<EduPathScreen> {
       ),
     );
   }
-
-  Widget _buildQuizCard(LessonModel lesson, ScrollController scrollController) {
-    return SingleChildScrollView(
-      controller: scrollController,
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            lesson.title,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 24),
-          ...lesson.questions!.asMap().entries.map((entry) {
-            final index = entry.key;
-            final question = entry.value;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${index + 1}. ${question.question}',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 12),
-                ...question.options.asMap().entries.map((option) {
-                  final optionIndex = option.key;
-                  final optionData = option.value;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: RadioListTile<int>(
-                      title: Text(optionData.text),
-                      value: optionData.id,
-                      groupValue: _quizAnswers.length > index ? _quizAnswers[index] : null,
-                      onChanged: _isQuizSubmitted ? null : (value) {
-                        if (value != null) {
-                          setState(() {
-                            if (_quizAnswers.length <= index) {
-                              _quizAnswers.add(value);
-                            } else {
-                              _quizAnswers[index] = value;
-                            }
-                          });
-                        }
-                      },
-                    ),
-                  );
-                }).toList(),
-                const SizedBox(height: 24),
-              ],
-            );
-          }).toList(),
-          if (!_isQuizSubmitted && _quizAnswers.length == lesson.questions!.length)
-            Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  final success = await _lessonService.submitQuizAnswers(lesson.id, _quizAnswers);
-                  setState(() {
-                    _isQuizSubmitted = true;
-                  });
-                  if (success) {
-                    setState(() {
-                      unlockedStep++;
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Quiz başarıyla tamamlandı! Sonraki ders açıldı.')),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Bazı cevaplar yanlış. Lütfen tekrar deneyin.')),
-                    );
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: appBarBlue,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                ),
-                child: const Text('Quiz\'i Tamamla', style: TextStyle(fontSize: 16)),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 class NodeWidget extends StatelessWidget {
   final bool isActive;
-  final bool isFirst;
-  const NodeWidget({Key? key, required this.isActive, required this.isFirst}) : super(key: key);
+  final bool isCompleted;
+  final bool hasQuiz;
+  
+  const NodeWidget({
+    Key? key,
+    required this.isActive,
+    required this.isCompleted,
+    required this.hasQuiz,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final Color gold = const Color(0xFFF9C846);
     final Color darkGreen = const Color(0xFF3A5A2A);
     final Color gray = Colors.grey[500]!;
+    
     return Container(
       width: 64,
       height: 64,
@@ -326,10 +314,47 @@ class NodeWidget extends StatelessWidget {
       ),
       child: Center(
         child: isActive
-            ? (isFirst
-                ? const Icon(Icons.description, color: Colors.white, size: 32)
-                : const Icon(Icons.check, color: Colors.white, size: 32))
+            ? (isCompleted
+                ? const Icon(Icons.check, color: Colors.white, size: 32)
+                : hasQuiz
+                    ? const Icon(Icons.quiz, color: Colors.white, size: 32)
+                    : const Icon(Icons.description, color: Colors.white, size: 32))
             : const Icon(Icons.lock, color: Colors.white, size: 30),
+      ),
+    );
+  }
+}
+
+class QuizWidget extends StatelessWidget {
+  final List<QuizQuestion> questions;
+  const QuizWidget({Key? key, required this.questions}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      elevation: 8,
+      color: Colors.white.withOpacity(0.97),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ListView.builder(
+          itemCount: questions.length,
+          itemBuilder: (context, index) {
+            final q = questions[index];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Soru ${index + 1}: ${q.question}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...q.options.map((o) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Text('- ${o.text}'),
+                )),
+                const Divider(),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

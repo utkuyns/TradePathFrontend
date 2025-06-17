@@ -101,4 +101,62 @@ class LessonService {
     
     return true;
   }
+
+  Future<bool> markLessonAsCompleted(int lessonId) async {
+    final token = await _storage.read(key: 'jwt');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.post(
+      Uri.parse('$_baseUrl$_lessonEndpoint/edupath/$lessonId/complete'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    return response.statusCode == 200;
+  }
+
+  Future<LessonModel> fetchLessonDetail(int lessonId) async {
+    final token = await _storage.read(key: 'jwt');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+    final response = await http.get(
+      Uri.parse('$_baseUrl$_lessonEndpoint/$lessonId'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return LessonModel.fromJson(data);
+    } else {
+      throw Exception('Failed to load lesson detail');
+    }
+  }
+
+  Future<List<LessonModel>> fetchLessonsWithProgress() async {
+    final token = await _storage.read(key: 'jwt');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+    final response = await http.get(
+      Uri.parse('$_baseUrl$_lessonEndpoint/edupath/progress'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final lessons = data['lessons'] as List;
+      return lessons.map((e) => LessonModel.fromJson(e)).toList();
+    } else {
+      throw Exception('Failed to load lessons with progress');
+    }
+  }
 } 

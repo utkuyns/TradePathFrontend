@@ -3,7 +3,9 @@ class LessonModel {
   final String title;
   final String content;
   final int orderNumber;
-  final bool isQuiz;
+  final bool isUnlocked;
+  final bool isCompleted;
+  final bool hasQuiz;
   final List<QuizQuestion>? questions;
 
   LessonModel({
@@ -11,7 +13,9 @@ class LessonModel {
     required this.title,
     required this.content,
     required this.orderNumber,
-    this.isQuiz = false,
+    this.isUnlocked = false,
+    this.isCompleted = false,
+    this.hasQuiz = false,
     this.questions,
   });
 
@@ -21,7 +25,9 @@ class LessonModel {
       title: json['title'] as String? ?? '',
       content: json['content'] as String? ?? '',
       orderNumber: json['orderNumber'] as int? ?? 0,
-      isQuiz: json['isQuiz'] as bool? ?? false,
+      isUnlocked: json['isUnlocked'] as bool? ?? json['unlocked'] as bool? ?? false,
+      isCompleted: json['isCompleted'] as bool? ?? json['completed'] as bool? ?? false,
+      hasQuiz: json['hasQuiz'] as bool? ?? false,
       questions: json['questions'] != null
           ? (json['questions'] as List)
               .map((q) => QuizQuestion.fromJson(q))
