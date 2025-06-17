@@ -11,38 +11,42 @@ import 'stock_search_screen.dart';
 import 'trade_screen.dart';
 import 'profile_screen.dart';
 import '../data/auth_service.dart';
+import 'edu_path_screen.dart';
 
 class StockGainsModel {
   final double value;
   final List<double> chartData;
+  final List<dynamic> rawSnapshots;
 
-  StockGainsModel({required this.value, required this.chartData});
+  StockGainsModel({required this.value, required this.chartData, required this.rawSnapshots});
 
-  factory StockGainsModel.fromJson(Map<String, dynamic> json) {
-    double safeDouble(dynamic value) {
-      if (value == null) return 0.0;
-      if (value is int) return value.toDouble();
-      if (value is double) return value;
-      if (value is String) return double.tryParse(value) ?? 0.0;
-      return 0.0;
+  factory StockGainsModel.fromSnapshotJson(List<dynamic> jsonList) {
+    if (jsonList.isEmpty) {
+      return StockGainsModel(value: 0.0, chartData: [], rawSnapshots: []);
     }
-
-    List<double> parseChartData(List<dynamic>? dataList) {
-      if (dataList == null) return List.generate(20, (_) => math.Random().nextDouble() * 100);
-      return dataList.map((item) => safeDouble(item)).toList();
+    final chartData = <double>[];
+    final rawSnapshots = <dynamic>[];
+    for (final item in jsonList) {
+      if (item is Map<String, dynamic> && item.containsKey('totalValue')) {
+        chartData.add((item['totalValue'] as num?)?.toDouble() ?? 0.0);
+        rawSnapshots.add(item);
+      } else if (item is Map && item.containsKey('totalValue')) {
+        chartData.add((item['totalValue'] as num?)?.toDouble() ?? 0.0);
+        rawSnapshots.add(item);
+      } else if (item is Map && item.containsKey('value')) {
+        chartData.add((item['value'] as num?)?.toDouble() ?? 0.0);
+        rawSnapshots.add(item);
+      }
     }
-
-    return StockGainsModel(
-      value: safeDouble(json['value']),
-      chartData: parseChartData(json['chartData'] as List?),
-    );
+    final value = chartData.isNotEmpty ? chartData.last : 0.0;
+    return StockGainsModel(value: value, chartData: chartData, rawSnapshots: rawSnapshots);
   }
 }
 
 class HomeService {
   static const _baseUrl = 'http://10.0.2.2:8080';
   static const _watchlistEndpoint = '/api/watchlist';
-  static const _stockGainsEndpoint = '/api/portfolio/stock-gains';
+  static const _portfolioSnapshotsEndpoint = '/api/portfolio/snapshots';
   static const _userInfoEndpoint = '/api/user/info';
   static const _portfolioEndpoint = '/api/portfolio/my-holdings';
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -72,32 +76,24 @@ class HomeService {
     if (token == null) {
       throw Exception('No authentication token found');
     }
-    
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl$_stockGainsEndpoint'),
+        Uri.parse('$_baseUrl$_portfolioSnapshotsEndpoint'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
-      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return StockGainsModel.fromJson(data);
-      } else {
-        // API henüz hazır değilse örnek veri döndür
-        return StockGainsModel(
-          value: 25901.41,
-          chartData: List.generate(20, (_) => math.Random().nextDouble() * 100),
-        );
+        if (data is List) {
+          return StockGainsModel.fromSnapshotJson(data);
+        }
       }
+      // API'den beklenmeyen cevap gelirse boş veri döndür
+      return StockGainsModel(value: 0.0, chartData: [], rawSnapshots: []);
     } catch (e) {
-      // API henüz hazır değilse örnek veri döndür
-      return StockGainsModel(
-        value: 25901.41,
-        chartData: List.generate(20, (_) => math.Random().nextDouble() * 100),
-      );
+      return StockGainsModel(value: 0.0, chartData: [], rawSnapshots: []);
     }
   }
 
@@ -255,6 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<PortfolioItemModel>> _portfolioFuture;
   int _selectedIndex = 0;
   String _selectedTimeframe = 'This week';
+  static const List<String> _timeframes = ['This week', 'This month', 'All'];
 
   @override
   void initState() {
@@ -269,6 +266,31 @@ class _HomeScreenState extends State<HomeScreen> {
       _userNameFuture = HomeService().fetchUserName();
       _portfolioFuture = HomeService().fetchPortfolio();
     });
+  }
+
+  List<double> _filterChartData(List<double> chartData, List<dynamic> rawSnapshots) {
+    if (_selectedTimeframe == 'All' || chartData.isEmpty) return chartData;
+    final now = DateTime.now();
+    List<DateTime> dates = [];
+    for (final item in rawSnapshots) {
+      if (item is Map && item['snapshotDate'] != null) {
+        try {
+          dates.add(DateTime.parse(item['snapshotDate'].toString()));
+        } catch (_) {
+          dates.add(now);
+        }
+      } else {
+        dates.add(now);
+      }
+    }
+    if (_selectedTimeframe == 'This week') {
+      final weekAgo = now.subtract(const Duration(days: 7));
+      return [for (int i = 0; i < chartData.length; i++) if (dates[i].isAfter(weekAgo)) chartData[i]];
+    } else if (_selectedTimeframe == 'This month') {
+      final monthAgo = DateTime(now.year, now.month - 1, now.day);
+      return [for (int i = 0; i < chartData.length; i++) if (dates[i].isAfter(monthAgo)) chartData[i]];
+    }
+    return chartData;
   }
 
   void _onItemTapped(int index) {
@@ -287,6 +309,11 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const TradeScreen()),
+      );
+    } else if (index == 3) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const EduPathScreen()),
       );
     } else if (index == 4) {
       // Profil sayfasına yönlendirme
@@ -379,7 +406,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   future: _stockGainsFuture,
                   builder: (context, snapshot) {
                     final stockGains = snapshot.data;
-                    
+                    final rawSnapshots = snapshot.hasData && snapshot.data != null && snapshot.data!.chartData.isNotEmpty && snapshot.data is dynamic && snapshot.data is StockGainsModel && snapshot.data is! List<double> && snapshot.data is! List<int>
+                        ? (snapshot.data as dynamic).rawSnapshots ?? []
+                        : [];
+                    final filteredChartData = (snapshot.hasData && rawSnapshots.isNotEmpty)
+                        ? _filterChartData(stockGains!.chartData, rawSnapshots)
+                        : stockGains?.chartData ?? [];
                     return Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -417,24 +449,48 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Colors.grey.shade200),
+                                  border: Border.all(color: Color(0xFF2A3FFF), width: 1.2),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      _selectedTimeframe,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.keyboard_arrow_down, size: 18),
-                                  ],
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                constraints: const BoxConstraints(minHeight: 28),
+                                child: DropdownButton<String>(
+                                  value: _selectedTimeframe,
+                                  items: _timeframes.map((String value) {
+                                    return DropdownMenuItem<String>(
+                                      value: value,
+                                      child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white)),
+                                    );
+                                  }).toList(),
+                                  onChanged: (String? newValue) {
+                                    if (newValue != null) {
+                                      setState(() {
+                                        _selectedTimeframe = newValue;
+                                      });
+                                    }
+                                  },
+                                  underline: const SizedBox(),
+                                  icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w500, fontSize: 14),
+                                  dropdownColor: Color(0xFF2A3FFF),
+                                  borderRadius: BorderRadius.circular(20),
+                                  selectedItemBuilder: (BuildContext context) {
+                                    return _timeframes.map((String value) {
+                                      return Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          value,
+                                          style: const TextStyle(
+                                            color: Colors.black,
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList();
+                                  },
                                 ),
                               ),
                             ],
@@ -446,7 +502,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? CustomPaint(
                                     size: const Size(double.infinity, 150),
                                     painter: ChartPainter(
-                                      data: stockGains.chartData,
+                                      data: filteredChartData,
                                       lineColor: primaryColor,
                                       fillColor: primaryColor.withOpacity(0.2),
                                     ),

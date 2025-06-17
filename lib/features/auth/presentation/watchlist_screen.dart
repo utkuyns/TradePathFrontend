@@ -10,6 +10,7 @@ import 'trade_screen.dart';
 import 'profile_screen.dart';
 import '../data/auth_service.dart';
 import 'homepage.dart'; // HomeService ve MiniChartPainter için
+import 'edu_path_screen.dart';
 
 class WatchlistService {
   static const _baseUrl = 'http://10.0.2.2:8080';
@@ -115,7 +116,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           MaterialPageRoute(builder: (context) => const TradeScreen()),
         );
         break;
-      case 3: // EduPath - do nothing for now
+      case 3: // EduPath
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const EduPathScreen()),
+        );
         break;
       case 4: // Profile
         _navigateToProfile();

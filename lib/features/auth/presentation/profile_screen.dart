@@ -14,6 +14,7 @@ import '../domain/badge_model.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'account_settings_page.dart';
 import 'package:lottie/lottie.dart';
+import 'edu_path_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserModel user;
@@ -181,6 +182,13 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       if (updated == true) {
         await _refreshUser();
       }
+      return;
+    }
+    if (index == 3) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const EduPathScreen()),
+      );
       return;
     }
     setState(() {

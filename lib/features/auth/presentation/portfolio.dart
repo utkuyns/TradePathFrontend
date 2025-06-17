@@ -8,6 +8,7 @@ import 'trade_screen.dart';
 import 'profile_screen.dart';
 import 'homepage.dart';
 import 'package:lottie/lottie.dart';
+import 'edu_path_screen.dart';
 
 class NetWorthModel {
   final double virtualBalance;
@@ -152,6 +153,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const TradeScreen()),
+      );
+    } else if (index == 3) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const EduPathScreen()),
       );
     } else if (index == 4) {
       // Navigate to Profile
