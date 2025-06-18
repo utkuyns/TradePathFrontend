@@ -109,18 +109,37 @@ class PortfolioScreen extends StatefulWidget {
   State<PortfolioScreen> createState() => _PortfolioScreenState();
 }
 
-class _PortfolioScreenState extends State<PortfolioScreen> {
+class _PortfolioScreenState extends State<PortfolioScreen> with TickerProviderStateMixin {
   late Future<List<PortfolioItemModel>> _portfolioFuture;
   late Future<NetWorthModel> _netWorthFuture;
   int _selectedIndex = 1;
   Map<String, double> _buyPrices = {};
   bool _expanded = false;
+  bool _showPieChart = false;
+  late AnimationController _pieChartController;
+  late Animation<double> _pieChartAnimation;
 
   @override
   void initState() {
     super.initState();
     _portfolioFuture = PortfolioService().fetchPortfolio();
     _netWorthFuture = PortfolioService().fetchNetWorth();
+    
+    // Pasta grafiği animasyonu için controller
+    _pieChartController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    _pieChartAnimation = CurvedAnimation(
+      parent: _pieChartController,
+      curve: Curves.easeOutBack,
+    );
+  }
+
+  @override
+  void dispose() {
+    _pieChartController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchBuyPrices(List<PortfolioItemModel> items) async {
@@ -187,13 +206,25 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            SizedBox(
-              width: 40,
-              height: 40,
-              child: Lottie.asset(
-                'assets/animations/piechart.json',
-                repeat: true,
-                fit: BoxFit.contain,
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showPieChart = !_showPieChart;
+                });
+                // Pasta grafiği görünümüne geçiş yapıldığında animasyonu başlat
+                if (_showPieChart) {
+                  _pieChartController.reset();
+                  _pieChartController.forward();
+                }
+              },
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: Lottie.asset(
+                  'assets/animations/piechart.json',
+                  repeat: true,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             const SizedBox(width: 10),
@@ -327,142 +358,197 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                       ),
                     ),
                     const SizedBox(height: 22),
-                    // Tablo başlığı
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: boxColor.withOpacity(0.85),
-                        borderRadius: BorderRadius.circular(16),
+                    
+                    // Pasta Grafiği veya Tablo Başlığı
+                    if (_showPieChart) ...[
+                      // Pasta Grafiği
+                      Container(
+                        height: 300,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Portfolio Distribution',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Expanded(
+                              child: AnimatedBuilder(
+                                animation: _pieChartAnimation,
+                                builder: (context, child) {
+                                  return GestureDetector(
+                                    onTapUp: (details) {
+                                      _handlePieChartTap(details, items, context);
+                                    },
+                                    child: CustomPieChart(
+                                      items: items,
+                                      primaryColor: primaryColor,
+                                      animationValue: _pieChartAnimation.value,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(flex: 4, child: Text('Symbol', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-                          Expanded(flex: 2, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                          Expanded(flex: 3, child: Text('Avg. Cost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                          Expanded(flex: 3, child: Text('Current', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                          Expanded(flex: 2, child: Text('%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                        ],
+                      const SizedBox(height: 20),
+                    ] else ...[
+                      // Tablo başlığı
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: boxColor.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(flex: 4, child: Text('Symbol', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+                            Expanded(flex: 2, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                            Expanded(flex: 3, child: Text('Avg. Cost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                            Expanded(flex: 3, child: Text('Current', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                            Expanded(flex: 2, child: Text('%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
+                      const SizedBox(height: 10),
+                    ],
+                    
                     // Liste
                     Expanded(
-                      child: ListView.separated(
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          final buyPrice = _buyPrices[item.symbol] ?? 0.0;
-                          final double currentPrice = item.currentPrice;
-                          final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
-                          Color percentColor;
-                          if (changePercent > 0) {
-                            percentColor = Colors.green;
-                          } else if (changePercent < 0) {
-                            percentColor = Colors.red;
-                          } else {
-                            percentColor = Colors.amber[700]!;
-                          }
-                          return Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
+                      child: _showPieChart 
+                        ? _buildPieChartLegend(items, textColor)
+                        : ListView.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              final buyPrice = _buyPrices[item.symbol] ?? 0.0;
+                              final double currentPrice = item.currentPrice;
+                              final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
+                              Color percentColor;
+                              if (changePercent > 0) {
+                                percentColor = Colors.green;
+                              } else if (changePercent < 0) {
+                                percentColor = Colors.red;
+                              } else {
+                                percentColor = Colors.amber[700]!;
+                              }
+                              return Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                // Symbol + şirket adı
-                                Expanded(
-                                  flex: 4,
-                                  child: Row(
-                                    children: [
-                                      CircleAvatar(
-                                        backgroundColor: primaryColor.withOpacity(0.16),
-                                        child: Text(
-                                          item.symbol.isNotEmpty ? item.symbol[0] : '?',
-                                          style: TextStyle(
-                                            color: primaryColor,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
+                                child: Row(
+                                  children: [
+                                    // Symbol + şirket adı
+                                    Expanded(
+                                      flex: 4,
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            backgroundColor: primaryColor.withOpacity(0.16),
+                                            child: Text(
+                                              item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                                              style: TextStyle(
+                                                color: primaryColor,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            radius: 16,
                                           ),
-                                        ),
-                                        radius: 16,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              item.symbol,
-                                              style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  item.symbol,
+                                                  style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
+                                                Text(
+                                                  item.companyName,
+                                                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
                                             ),
-                                            Text(
-                                              item.companyName,
-                                              style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        '${item.quantity}',
+                                        style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}',
+                                        style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 14),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        '\$${item.currentPrice.toStringAsFixed(2)}',
+                                        style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Container(
+                                        alignment: Alignment.center,
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: percentColor.withOpacity(0.16),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
+                                          style: TextStyle(color: percentColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                          textAlign: TextAlign.center,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: Text(
-                                    '${item.quantity}',
-                                    style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 3,
-                                  child: Text(
-                                    buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}',
-                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 14),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 3,
-                                  child: Text(
-                                    '\$${item.currentPrice.toStringAsFixed(2)}',
-                                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: Container(
-                                    alignment: Alignment.center,
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: percentColor.withOpacity(0.16),
-                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Text(
-                                      '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
-                                      style: TextStyle(color: percentColor, fontWeight: FontWeight.bold, fontSize: 12),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                              );
+                            },
+                          ),
                     ),
                   ],
                 ),
@@ -558,5 +644,505 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       ),
     );
   }
+
+  Widget _buildPieChartLegend(List<PortfolioItemModel> items, Color textColor) {
+    final totalValue = _getTotalValue(items);
+    final List<Color> colors = [
+      const Color(0xFF2A3FFF),
+      const Color(0xFF4CAF50),
+      const Color(0xFFFF9800),
+      const Color(0xFFE91E63),
+      const Color(0xFF9C27B0),
+      const Color(0xFF00BCD4),
+      const Color(0xFF795548),
+      const Color(0xFF607D8B),
+    ];
+
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final percentage = totalValue > 0 ? (item.totalValue / totalValue) * 100 : 0.0;
+        final color = colors[index % colors.length];
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.symbol,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: textColor,
+                      ),
+                    ),
+                    Text(
+                      item.companyName,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '\$${item.totalValue.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: textColor,
+                    ),
+                  ),
+                  Text(
+                    '${percentage.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _handlePieChartTap(TapUpDetails details, List<PortfolioItemModel> items, BuildContext context) {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final localPosition = renderBox.globalToLocal(details.globalPosition);
+    
+    // Pasta grafiğinin merkezini ve boyutlarını hesapla
+    final size = renderBox.size;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width < size.height ? size.width : size.height) / 2 * 0.8;
+    
+    // Tıklama noktasının merkeze olan uzaklığını kontrol et
+    final distance = (localPosition - center).distance;
+    if (distance > radius) return; // Pasta grafiği dışına tıklandı
+    
+    // Tıklama açısını hesapla
+    final angle = (localPosition - center).direction;
+    final normalizedAngle = (angle + 90 * (3.14159 / 180)) % (2 * 3.14159);
+    
+    // Toplam değeri hesapla
+    final totalValue = _getTotalValue(items);
+    if (totalValue == 0) return;
+    
+    // Hangi dilime tıklandığını bul
+    double currentAngle = 0;
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
+      final sweepAngle = (item.totalValue / totalValue) * 2 * 3.14159;
+      
+      if (normalizedAngle >= currentAngle && normalizedAngle <= currentAngle + sweepAngle) {
+        _showStockDetailModal(context, item, i, items);
+        return;
+      }
+      currentAngle += sweepAngle;
+    }
+  }
+
+  void _showStockDetailModal(BuildContext context, PortfolioItemModel item, int index, List<PortfolioItemModel> items) {
+    final buyPrice = _buyPrices[item.symbol] ?? 0.0;
+    final double currentPrice = item.currentPrice;
+    final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
+    
+    // Portfolio total'ı hesaplamak için items listesini kullan
+    final double portfolioTotal = _getTotalValue(items);
+    final double percentage = portfolioTotal > 0 ? (item.totalValue / portfolioTotal) * 100 : 0.0;
+    
+    final List<Color> colors = [
+      const Color(0xFF2A3FFF),
+      const Color(0xFF4CAF50),
+      const Color(0xFFFF9800),
+      const Color(0xFFE91E63),
+      const Color(0xFF9C27B0),
+      const Color(0xFF00BCD4),
+      const Color(0xFF795548),
+      const Color(0xFF607D8B),
+    ];
+    
+    final color = colors[index % colors.length];
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(25),
+            topRight: Radius.circular(25),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Stock header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Center(
+                      child: Text(
+                        item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.symbol,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 24,
+                          ),
+                        ),
+                        Text(
+                          item.companyName,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 30),
+            
+            // Stock details
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    // Current price and change
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Current Price',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '\$${item.currentPrice.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Change',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: changePercent >= 0 ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
+                                  style: TextStyle(
+                                    color: changePercent >= 0 ? Colors.green : Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 20),
+                    
+                    // Portfolio details
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: color.withOpacity(0.2)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Shares Owned',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              Text(
+                                '${item.quantity}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Total Value',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              Text(
+                                '\$${item.totalValue.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Portfolio %',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              Text(
+                                '${percentage.toStringAsFixed(1)}%',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (buyPrice > 0) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Avg. Cost',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                Text(
+                                  '\$${buyPrice.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 30),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Custom Pasta Grafiği Widget'ı
+class CustomPieChart extends StatelessWidget {
+  final List<PortfolioItemModel> items;
+  final Color primaryColor;
+  final double animationValue;
+
+  const CustomPieChart({
+    Key? key,
+    required this.items,
+    required this.primaryColor,
+    required this.animationValue,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: PieChartPainter(
+        items: items,
+        primaryColor: primaryColor,
+        animationValue: animationValue,
+      ),
+      child: Container(),
+    );
+  }
+}
+
+class PieChartPainter extends CustomPainter {
+  final List<PortfolioItemModel> items;
+  final Color primaryColor;
+  final double animationValue;
+
+  PieChartPainter({
+    required this.items,
+    required this.primaryColor,
+    required this.animationValue,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (items.isEmpty) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width < size.height ? size.width : size.height) / 2 * 0.8;
+    
+    final totalValue = items.fold(0.0, (sum, item) => sum + item.totalValue);
+    if (totalValue == 0) return;
+
+    final List<Color> colors = [
+      const Color(0xFF2A3FFF),
+      const Color(0xFF4CAF50),
+      const Color(0xFFFF9800),
+      const Color(0xFFE91E63),
+      const Color(0xFF9C27B0),
+      const Color(0xFF00BCD4),
+      const Color(0xFF795548),
+      const Color(0xFF607D8B),
+    ];
+
+    double startAngle = -90 * (3.14159 / 180); // -90 derece başlangıç
+
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
+      final fullSweepAngle = (item.totalValue / totalValue) * 2 * 3.14159;
+      
+      // Her dilim için delay hesapla (sırayla açılması için)
+      final delay = i * 0.1; // Her dilim 0.1 saniye gecikme ile
+      final segmentAnimation = (animationValue - delay).clamp(0.0, 1.0) / (1.0 - delay).clamp(0.1, 1.0);
+      
+      // Animasyon değerine göre dilim açısını hesapla
+      final currentSweepAngle = fullSweepAngle * segmentAnimation;
+      final color = colors[i % colors.length];
+
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
+
+      final rect = Rect.fromCircle(center: center, radius: radius);
+      canvas.drawArc(rect, startAngle, currentSweepAngle, true, paint);
+
+      // Kenarlık için
+      final borderPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+
+      canvas.drawArc(rect, startAngle, currentSweepAngle, true, borderPaint);
+
+      startAngle += fullSweepAngle;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 

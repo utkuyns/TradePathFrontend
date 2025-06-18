@@ -12,6 +12,7 @@ import 'trade_screen.dart';
 import 'profile_screen.dart';
 import '../data/auth_service.dart';
 import 'edu_path_entry_screen.dart';
+import '../data/portfolio_service.dart' as data;
 
 class StockGainsModel {
   final double value;
@@ -252,6 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   String _selectedTimeframe = 'This week';
   static const List<String> _timeframes = ['This week', 'This month', 'All'];
+  Map<String, double> _buyPrices = {};
 
   @override
   void initState() {
@@ -266,6 +268,17 @@ class _HomeScreenState extends State<HomeScreen> {
       _userNameFuture = HomeService().fetchUserName();
       _portfolioFuture = HomeService().fetchPortfolio();
     });
+    _portfolioFuture.then((items) => _fetchBuyPrices(items));
+  }
+
+  Future<void> _fetchBuyPrices(List<PortfolioItemModel> items) async {
+    final service = data.PortfolioService();
+    for (final item in items) {
+      final price = await service.fetchLastBuyPrice(item.symbol);
+      setState(() {
+        _buyPrices[item.symbol] = price;
+      });
+    }
   }
 
   List<double> _filterChartData(List<double> chartData, List<dynamic> rawSnapshots) {
@@ -642,11 +655,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               itemBuilder: (context, index) {
                                 final item = items[index];
                                 final double currentPrice = item.currentPrice;
-                                final double purchasePrice = item.purchasePrice;
-                                final bool isPositive = currentPrice > purchasePrice;
-                                final double changePercentage = purchasePrice > 0
-                                    ? ((currentPrice - purchasePrice) / purchasePrice) * 100
-                                    : 0.0;
+                                final double buyPrice = _buyPrices[item.symbol] ?? 0.0;
+                                final double changePercentage = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
+                                final bool isPositive = changePercentage > 0;
                                 return Container(
                                   width: MediaQuery.of(context).size.width * 0.43, // Ekranın yaklaşık yarısı kadar genişlik
                                   margin: EdgeInsets.only(

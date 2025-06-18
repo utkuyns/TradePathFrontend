@@ -24,4 +24,24 @@ class PortfolioService {
       throw Exception('Failed to load portfolio');
     }
   }
+
+  Future<double> fetchLastBuyPrice(String symbol) async {
+    final token = await _storage.read(key: 'jwt');
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/trades/history'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> trades = jsonDecode(response.body);
+      final buys = trades.where((t) => t['symbol'] == symbol && (t['quantity'] ?? 0) > 0).toList();
+      if (buys.isNotEmpty) {
+        buys.sort((a, b) => DateTime.parse(b['tradeDate']).compareTo(DateTime.parse(a['tradeDate'])));
+        return (buys.first['pricePerShare'] as num?)?.toDouble() ?? 0.0;
+      }
+    }
+    return 0.0;
+  }
 } 

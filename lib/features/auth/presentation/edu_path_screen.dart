@@ -364,6 +364,76 @@ class _EduPathScreenState extends State<EduPathScreen> with TickerProviderStateM
               ),
             ),
           ),
+          // Tree Lottie animasyonu (güneşin 310px aşağısı)
+          Positioned(
+            top: (height * 0.06 - 8) + 310,
+            left: width * 0.5 - 60 - 90 + 4,
+            child: SizedBox(
+              width: 120,
+              height: 120,
+              child: Lottie.asset(
+                'assets/animations/tree.json',
+                repeat: true,
+                animate: true,
+              ),
+            ),
+          ),
+          // İkinci tree Lottie animasyonu (40px sağa kaydırılmış)
+          Positioned(
+            top: (height * 0.06 - 8) + 310,
+            left: width * 0.5 - 60 - 90 + 4 + 40,
+            child: SizedBox(
+              width: 120,
+              height: 120,
+              child: Lottie.asset(
+                'assets/animations/tree.json',
+                repeat: true,
+                animate: true,
+              ),
+            ),
+          ),
+          // Üçüncü tree Lottie animasyonu (1. node'un 35px sağı, 15px yukarıda)
+          Positioned(
+            top: nodePositions[0].dy * height - 32 - 15,
+            left: (nodePositions[0].dx * width - 32) + 35,
+            child: SizedBox(
+              width: 120,
+              height: 120,
+              child: Lottie.asset(
+                'assets/animations/tree.json',
+                repeat: true,
+                animate: true,
+              ),
+            ),
+          ),
+          // Dördüncü tree Lottie animasyonu (güneşin 120px aşağısı)
+          Positioned(
+            top: (height * 0.06 - 8) + 120,
+            left: width * 0.5 - 60 - 90 + 4,
+            child: SizedBox(
+              width: 120,
+              height: 120,
+              child: Lottie.asset(
+                'assets/animations/tree.json',
+                repeat: true,
+                animate: true,
+              ),
+            ),
+          ),
+          // Beşinci tree Lottie animasyonu (4. eklenenin 50px sağı)
+          Positioned(
+            top: (height * 0.06 - 8) + 120,
+            left: width * 0.5 - 60 - 90 + 4 + 50,
+            child: SizedBox(
+              width: 120,
+              height: 120,
+              child: Lottie.asset(
+                'assets/animations/tree.json',
+                repeat: true,
+                animate: true,
+              ),
+            ),
+          ),
           // --- KARTLAR EN ÜSTE ALINDI ---
           FutureBuilder<List<LessonModel>>(
             future: _lessonsFuture,
