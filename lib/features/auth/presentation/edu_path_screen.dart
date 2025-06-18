@@ -4,6 +4,8 @@ import '../domain/lesson_model.dart';
 import 'package:flutter/services.dart';
 import 'package:card_swiper/card_swiper.dart';
 import 'package:collection/collection.dart';
+import 'package:lottie/lottie.dart';
+import 'dart:ui';
 
 class EduPathScreen extends StatefulWidget {
   const EduPathScreen({Key? key}) : super(key: key);
@@ -12,7 +14,7 @@ class EduPathScreen extends StatefulWidget {
   State<EduPathScreen> createState() => _EduPathScreenState();
 }
 
-class _EduPathScreenState extends State<EduPathScreen> {
+class _EduPathScreenState extends State<EduPathScreen> with TickerProviderStateMixin {
   static const int totalSteps = 10;
   static const Color appBarBlue = Color(0xFF7FBBBF);
   late Future<List<LessonModel>> _lessonsFuture;
@@ -26,6 +28,12 @@ class _EduPathScreenState extends State<EduPathScreen> {
   LessonModel? _selectedLessonDetail;
   bool _isLoadingLessonDetail = false;
   List<QuizQuestion>? _currentQuizQuestions;
+
+  // Bulut animasyon controller'ları
+  late AnimationController _cloudController1;
+  late AnimationController _cloudController2;
+  late AnimationController _cloudController3;
+  late AnimationController _cloudController4;
 
   // Node positions based on user-provided pixel coordinates (image size: 1080x1440), each moved 200px up on y-axis
   static const List<Offset> nodePositions = [
@@ -45,6 +53,36 @@ class _EduPathScreenState extends State<EduPathScreen> {
   void initState() {
     super.initState();
     _lessonsFuture = _lessonService.fetchLessonsWithProgress();
+    
+    // Bulut animasyonlarını başlat
+    _cloudController1 = AnimationController(
+      duration: const Duration(seconds: 12),
+      vsync: this,
+    )..repeat();
+    
+    _cloudController2 = AnimationController(
+      duration: const Duration(seconds: 18),
+      vsync: this,
+    )..repeat();
+    
+    _cloudController3 = AnimationController(
+      duration: const Duration(seconds: 15),
+      vsync: this,
+    )..repeat();
+    
+    _cloudController4 = AnimationController(
+      duration: const Duration(seconds: 20),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _cloudController1.dispose();
+    _cloudController2.dispose();
+    _cloudController3.dispose();
+    _cloudController4.dispose();
+    super.dispose();
   }
 
   void _openFlashcard(int step) async {
@@ -65,6 +103,7 @@ class _EduPathScreenState extends State<EduPathScreen> {
       _quizAnswers = [];
       _isQuizSubmitted = false;
       _selectedLessonDetail = null;
+      _currentQuizQuestions = null;
     });
     // Detaylı dersi çek
     final detail = await _lessonService.fetchLessonDetail(lesson.id);
@@ -90,27 +129,82 @@ class _EduPathScreenState extends State<EduPathScreen> {
   void _markLessonAsCompleted() async {
     final lessons = await _lessonsFuture;
     final currentLesson = lessons.firstWhere((l) => l.orderNumber == _selectedStep);
-    // Quiz kontrolünü kaldırıyoruz, önce dersi tamamla
+
+    // Eğer lesson zaten tamamlanmışsa kartı kapat
+    if (currentLesson.isCompleted) {
+      _closeFlashcard();
+      return;
+    }
+    
+    // 5. node için özel kontrol - quiz tamamlanmadan dersi tamamlama
+    if (_selectedStep == 5 && currentLesson.hasQuiz) {
+      // Quiz'i göster ama dersi henüz tamamlama
+      final quizQuestions = await _lessonService.fetchLessonQuiz(currentLesson.id);
+      setState(() {
+        _currentQuizQuestions = quizQuestions;
+        _showFlashcard = true;
+        _selectedLessonDetail = currentLesson; // Quiz ekranı için gerekli
+      });
+      return;
+    }
+    
+    // Diğer node'lar için normal akış
     final success = await _lessonService.markLessonAsCompleted(currentLesson.id);
     if (success) {
       setState(() {
         _isLoadingLessonDetail = true;
       });
       final newLessons = await _lessonService.fetchLessonsWithProgress();
-      // Eğer dersin quiz'i varsa, quiz sorularını çek ve modalda göster
       List<QuizQuestion>? quizQuestions;
-      if (currentLesson.hasQuiz) {
-        quizQuestions = await _lessonService.fetchLessonQuiz(currentLesson.id);
+      bool showQuiz = false;
+      // Her 5. dersten sonra ilgili quiz'i getir
+      if (currentLesson.orderNumber % 5 == 0) {
+        final quizId = (currentLesson.orderNumber ~/ 5); // ör: 10. ders -> 2. quiz
+        quizQuestions = await _lessonService.fetchLessonQuiz(quizId);
+        if (quizQuestions != null && quizQuestions.isNotEmpty) {
+          showQuiz = true;
+        }
       }
       setState(() {
         _lessonsFuture = Future.value(newLessons);
-        _showFlashcard = currentLesson.hasQuiz; // Quiz varsa modal açık kalsın
+        _showFlashcard = showQuiz;
         _selectedLessonDetail = newLessons.firstWhere((l) => l.orderNumber == _selectedStep);
         _isLoadingLessonDetail = false;
         _currentQuizQuestions = quizQuestions;
       });
+      if (!showQuiz) {
+        _closeFlashcard(); // Quiz yoksa kartı kapat
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lesson completed successfully!')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lesson could not be completed. Please try again.')),
+      );
+    }
+  }
+
+  // 5. node için quiz tamamlandığında çağrılacak method
+  void _completeLessonWithQuiz() async {
+    final lessons = await _lessonsFuture;
+    final currentLesson = lessons.firstWhere((l) => l.orderNumber == _selectedStep);
+    
+    final success = await _lessonService.markLessonAsCompleted(currentLesson.id);
+    if (success) {
+      setState(() {
+        _isLoadingLessonDetail = true;
+      });
+      final newLessons = await _lessonService.fetchLessonsWithProgress();
+      setState(() {
+        _lessonsFuture = Future.value(newLessons);
+        _showFlashcard = false; // Quiz tamamlandı, modalı kapat
+        _selectedLessonDetail = newLessons.firstWhere((l) => l.orderNumber == _selectedStep);
+        _isLoadingLessonDetail = false;
+        _currentQuizQuestions = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lesson and quiz completed successfully!')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -158,6 +252,119 @@ class _EduPathScreenState extends State<EduPathScreen> {
               fit: BoxFit.cover,
             ),
           ),
+          // Bulut Lottie animasyonları (gökyüzü alanı) -- GÜNEŞİN ALTINA ALINDI
+          AnimatedBuilder(
+            animation: _cloudController1,
+            builder: (context, child) {
+              final screenSize = MediaQuery.of(context).size;
+              final x = lerpDouble(-80, screenSize.width + 80, _cloudController1.value)!;
+              return Positioned(
+                top: 24,
+                left: x,
+                child: SizedBox(
+                  width: 90,
+                  height: 60,
+                  child: Lottie.asset('assets/animations/cloud.json', repeat: true),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _cloudController2,
+            builder: (context, child) {
+              final screenSize = MediaQuery.of(context).size;
+              final x = lerpDouble(screenSize.width + 80, -80, _cloudController2.value)!;
+              return Positioned(
+                top: 38,
+                left: x,
+                child: SizedBox(
+                  width: 70,
+                  height: 45,
+                  child: Lottie.asset('assets/animations/cloud.json', repeat: true),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _cloudController3,
+            builder: (context, child) {
+              final screenSize = MediaQuery.of(context).size;
+              final x = lerpDouble(-60, screenSize.width + 60, _cloudController3.value)!;
+              return Positioned(
+                top: 18,
+                left: x,
+                child: SizedBox(
+                  width: 60,
+                  height: 38,
+                  child: Lottie.asset('assets/animations/cloud.json', repeat: true),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _cloudController4,
+            builder: (context, child) {
+              final screenSize = MediaQuery.of(context).size;
+              final x = lerpDouble(screenSize.width + 60, -60, _cloudController4.value)!;
+              return Positioned(
+                top: 52,
+                left: x,
+                child: SizedBox(
+                  width: 80,
+                  height: 50,
+                  child: Lottie.asset('assets/animations/cloud.json', repeat: true),
+                ),
+              );
+            },
+          ),
+          // EKSTRA BULUT 1 (ilk bulutla aynı koordinat)
+          AnimatedBuilder(
+            animation: _cloudController1,
+            builder: (context, child) {
+              final screenSize = MediaQuery.of(context).size;
+              final x = lerpDouble(-100, screenSize.width + 100, (_cloudController1.value + 0.3) % 1.0)!;
+              return Positioned(
+                top: 24,
+                left: x,
+                child: SizedBox(
+                  width: 60,
+                  height: 38,
+                  child: Lottie.asset('assets/animations/cloud.json', repeat: true),
+                ),
+              );
+            },
+          ),
+          // EKSTRA BULUT 2 (ikinci bulutla aynı koordinat)
+          AnimatedBuilder(
+            animation: _cloudController2,
+            builder: (context, child) {
+              final screenSize = MediaQuery.of(context).size;
+              final x = lerpDouble(screenSize.width + 120, -120, (_cloudController2.value + 0.5) % 1.0)!;
+              return Positioned(
+                top: 38,
+                left: x,
+                child: SizedBox(
+                  width: 100,
+                  height: 60,
+                  child: Lottie.asset('assets/animations/cloud.json', repeat: true),
+                ),
+              );
+            },
+          ),
+          Positioned(
+            top: height * 0.06 - 8, // 8px yukarı
+            left: width * 0.5 - 60 - 90 + 4, // 2px daha sağa, toplamda 4px sağa
+            child: SizedBox(
+              width: 100,
+              height: 100,
+              child: Lottie.asset(
+                'assets/animations/newsun2.json',
+                repeat: true,
+                animate: true, // animasyonun oynamasını garantiye al
+              ),
+            ),
+          ),
+          // --- KARTLAR EN ÜSTE ALINDI ---
           FutureBuilder<List<LessonModel>>(
             future: _lessonsFuture,
             builder: (context, snapshot) {
@@ -165,9 +372,8 @@ class _EduPathScreenState extends State<EduPathScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(child: Text('Bir hata oluştu: ${snapshot.error}'));
+                return Center(child: Text('Bir hata oluştu: {snapshot.error}'));
               }
-              
               final lessons = snapshot.data ?? [];
               return Stack(
                 children: [
@@ -215,58 +421,32 @@ class _EduPathScreenState extends State<EduPathScreen> {
                   child: Center(
                     child: GestureDetector(
                       onTap: () {},
-                      child: SizedBox(
-                        width: width * 0.92,
-                        height: height * 0.75,
-                        child: _isLoadingLessonDetail
-                            ? const Center(child: CircularProgressIndicator())
-                            : _selectedLessonDetail == null
-                                ? const Center(child: Text('Ders bulunamadı.'))
-                                : (_selectedLessonDetail!.isCompleted && _selectedLessonDetail!.hasQuiz && _currentQuizQuestions != null)
-                                    ? QuizWidget(questions: _currentQuizQuestions!)
-                                    : Card(
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                                        elevation: 8,
-                                        color: Colors.white.withOpacity(0.97),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Column(
-                                            children: [
-                                              Expanded(
-                                                child: SingleChildScrollView(
-                                                  padding: const EdgeInsets.all(16.0),
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        _selectedLessonDetail!.title,
-                                                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                                                      ),
-                                                      const SizedBox(height: 16),
-                                                      Text(
-                                                        _selectedLessonDetail!.content,
-                                                        style: const TextStyle(fontSize: 16, height: 1.5),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                              if (!_selectedLessonDetail!.isCompleted)
-                                                Padding(
-                                                  padding: const EdgeInsets.all(16.0),
-                                                  child: ElevatedButton(
-                                                    onPressed: _markLessonAsCompleted,
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: appBarBlue,
-                                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                                                    ),
-                                                    child: const Text('Complete Lesson', style: TextStyle(fontSize: 16)),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
+                      child: AnimatedScale(
+                        scale: 1.0,
+                        duration: Duration(milliseconds: 350),
+                        curve: Curves.easeOutBack,
+                        child: SizedBox(
+                          width: width * 0.92,
+                          height: height * 0.75,
+                          child: _isLoadingLessonDetail
+                              ? const Center(child: CircularProgressIndicator())
+                              : _selectedLessonDetail == null
+                                  ? const Center(child: Text('Lesson not found.'))
+                                  : (_currentQuizQuestions != null && _showFlashcard)
+                                      ? QuizWidget(
+                                          questions: _currentQuizQuestions!,
+                                          lessonId: _selectedLessonDetail!.id,
+                                          onQuizSuccess: _selectedStep == 5 ? _completeLessonWithQuiz : _markLessonAsCompleted,
+                                          onClose: _closeFlashcard,
+                                        )
+                                      : LessonCard(
+                                          title: _selectedLessonDetail!.title,
+                                          content: _selectedLessonDetail!.content,
+                                          isCompleted: _selectedLessonDetail!.isCompleted,
+                                          onComplete: _markLessonAsCompleted,
+                                          onClose: _closeFlashcard,
                                         ),
-                                      ),
+                        ),
                       ),
                     ),
                   ),
@@ -325,9 +505,231 @@ class NodeWidget extends StatelessWidget {
   }
 }
 
-class QuizWidget extends StatelessWidget {
+class QuizWidget extends StatefulWidget {
   final List<QuizQuestion> questions;
-  const QuizWidget({Key? key, required this.questions}) : super(key: key);
+  final int lessonId;
+  final Function onQuizSuccess;
+  final VoidCallback onClose;
+  const QuizWidget({Key? key, required this.questions, required this.lessonId, required this.onQuizSuccess, required this.onClose}) : super(key: key);
+
+  @override
+  State<QuizWidget> createState() => _QuizWidgetState();
+}
+
+class _QuizWidgetState extends State<QuizWidget> with SingleTickerProviderStateMixin {
+  int _currentQuestion = 0;
+  int _correctCount = 0;
+  bool _isLoading = false;
+  bool _quizFinished = false;
+  String? _errorMessage;
+  String? _explanation;
+  List<int> _selectedOptions = [];
+  int? _lastAnsweredOption;
+  bool? _lastAnswerCorrect;
+  late AnimationController _cardAnimController;
+
+  final LessonService _lessonService = LessonService();
+
+  @override
+  void initState() {
+    super.initState();
+    _cardAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+      lowerBound: 0.95,
+      upperBound: 1.0,
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _cardAnimController.dispose();
+    super.dispose();
+  }
+
+  void _answer(int optionId) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _explanation = null;
+      _lastAnsweredOption = optionId;
+      _lastAnswerCorrect = null;
+    });
+    try {
+      final response = await _lessonService.submitQuizAnswersSingle(widget.questions[_currentQuestion].id, optionId);
+      setState(() {
+        _explanation = (response.explanation.isNotEmpty) ? response.explanation : null;
+        _errorMessage = null;
+        _lastAnswerCorrect = response.correct;
+      });
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (!mounted) return;
+      if (response.correct) {
+        _selectedOptions.add(optionId);
+        if (_currentQuestion == widget.questions.length - 1) {
+          setState(() {
+            _quizFinished = true;
+            _correctCount = widget.questions.length;
+            _explanation = null;
+            _errorMessage = null;
+          });
+          widget.onQuizSuccess();
+          widget.onClose(); // Quiz bitince kartı kapat
+        } else {
+          setState(() {
+            _currentQuestion++;
+            _explanation = null;
+            _errorMessage = null;
+            _lastAnsweredOption = null;
+            _lastAnswerCorrect = null;
+          });
+        }
+      } else {
+        // Yanlış şık seçildiyse, kısa bir süre sonra tekrar seçim yapılabilsin
+        await Future.delayed(const Duration(milliseconds: 1000));
+        if (!mounted) return;
+        setState(() {
+          _lastAnsweredOption = null;
+          _lastAnswerCorrect = null;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _explanation = null;
+        _errorMessage = 'An error occurred: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = widget.questions[_currentQuestion];
+    return AnimatedScale(
+      scale: _cardAnimController.value,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutBack,
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 12,
+        color: Colors.white.withOpacity(0.98),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
+          child: _quizFinished
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.emoji_events, color: Colors.amber, size: 72),
+                      const SizedBox(height: 18),
+                      const Text('Congratulations! You answered all questions correctly.', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Question ${_currentQuestion + 1} of ${widget.questions.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18, color: Color(0xFF3A5A2A))),
+                    const SizedBox(height: 18),
+                    Text(q.question, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, height: 1.3)),
+                    const SizedBox(height: 28),
+                    ...q.options.map((o) {
+                      final isSelected = _lastAnsweredOption == o.id;
+                      final isCorrect = isSelected && _lastAnswerCorrect == true;
+                      final isWrong = isSelected && _lastAnswerCorrect == false;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOut,
+                        margin: const EdgeInsets.symmetric(vertical: 7),
+                        child: GestureDetector(
+                          onTap: (_isLoading || (o.quizId != null && o.quizId != q.id) || _lastAnsweredOption != null) ? null : () => _answer(o.id),
+                          child: AnimatedScale(
+                            scale: isSelected ? 0.97 : 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: isCorrect
+                                    ? Colors.green[400]
+                                    : isWrong
+                                        ? Colors.red[300]
+                                        : Colors.blueGrey[50],
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isCorrect
+                                      ? Colors.green
+                                      : isWrong
+                                          ? Colors.red
+                                          : Colors.blueGrey[200]!,
+                                  width: 2.2,
+                                ),
+                                boxShadow: [
+                                  if (isSelected)
+                                    BoxShadow(
+                                      color: isCorrect
+                                          ? Colors.green.withOpacity(0.18)
+                                          : isWrong
+                                              ? Colors.red.withOpacity(0.18)
+                                              : Colors.blueGrey.withOpacity(0.10),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                ],
+                              ),
+                              child: Text(
+                                o.text,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
+                                  color: isCorrect || isWrong ? Colors.white : Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    if (_isLoading) ...[
+                      const SizedBox(height: 18),
+                      const Center(child: CircularProgressIndicator()),
+                    ],
+                    if (_explanation != null) ...[
+                      const SizedBox(height: 18),
+                      Text(_explanation!, style: const TextStyle(color: Colors.blueGrey, fontSize: 16)),
+                    ],
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 18),
+                      Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 16)),
+                    ],
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class LessonCard extends StatelessWidget {
+  final String title;
+  final String content;
+  final bool isCompleted;
+  final VoidCallback onComplete;
+  final VoidCallback onClose;
+  static const Color appBarBlue = Color(0xFF7FBBBF);
+
+  const LessonCard({
+    Key? key,
+    required this.title,
+    required this.content,
+    required this.isCompleted,
+    required this.onComplete,
+    required this.onClose,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -336,24 +738,136 @@ class QuizWidget extends StatelessWidget {
       elevation: 8,
       color: Colors.white.withOpacity(0.97),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView.builder(
-          itemCount: questions.length,
-          itemBuilder: (context, index) {
-            final q = questions[index];
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Soru ${index + 1}: ${q.question}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                ...q.options.map((o) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.0),
-                  child: Text('- ${o.text}'),
-                )),
-                const Divider(),
+                const SizedBox(width: 1),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 28, color: Color(0xFF222B45)),
+                  onPressed: onClose,
+                  tooltip: 'Close',
+                ),
               ],
-            );
-          },
+            ),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 0.2),
+            ),
+            const SizedBox(height: 18),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Text(
+                  content,
+                  style: const TextStyle(fontSize: 17, height: 1.6, color: Color(0xFF222B45)),
+                ),
+              ),
+            ),
+            if (!isCompleted)
+              Padding(
+                padding: const EdgeInsets.only(top: 24.0, bottom: 8.0),
+                child: _AnimatedGradientButton(
+                  onTap: onComplete,
+                  text: 'Complete Lesson',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedGradientButton extends StatefulWidget {
+  final VoidCallback onTap;
+  final String text;
+  const _AnimatedGradientButton({required this.onTap, required this.text});
+
+  @override
+  State<_AnimatedGradientButton> createState() => _AnimatedGradientButtonState();
+}
+
+class _AnimatedGradientButtonState extends State<_AnimatedGradientButton> with SingleTickerProviderStateMixin {
+  double _scale = 1.0;
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+      lowerBound: 0.96,
+      upperBound: 1.0,
+      value: 1.0,
+    );
+    _controller.addListener(() {
+      setState(() {
+        _scale = _controller.value;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails details) {
+    _controller.reverse();
+  }
+
+  void _onTapUp(TapUpDetails details) {
+    _controller.forward();
+  }
+
+  void _onTapCancel() {
+    _controller.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      child: Transform.scale(
+        scale: _scale,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF43CEA2), Color(0xFF185A9D)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.10),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              widget.text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
         ),
       ),
     );

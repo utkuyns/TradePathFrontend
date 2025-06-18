@@ -11,7 +11,7 @@ import 'stock_search_screen.dart';
 import 'trade_screen.dart';
 import 'profile_screen.dart';
 import '../data/auth_service.dart';
-import 'edu_path_screen.dart';
+import 'edu_path_entry_screen.dart';
 
 class StockGainsModel {
   final double value;
@@ -313,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (index == 3) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const EduPathScreen()),
+        MaterialPageRoute(builder: (context) => const EduPathEntryScreen()),
       );
     } else if (index == 4) {
       // Profil sayfasına yönlendirme

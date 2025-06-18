@@ -37,7 +37,9 @@ flutter:
     - assets/edupathmap.webp
     - assets/
     - assets/images/
-
+    - assets/animations/cloud.json
+    - assets/animations/sun.json
+    - assets/animations/newsun2.json
 # flutter_launcher_icons configuration should be at the root level
 flutter_launcher_icons:
   android: true

@@ -50,7 +50,7 @@ class QuizQuestion {
 
   factory QuizQuestion.fromJson(Map<String, dynamic> json) {
     return QuizQuestion(
-      id: json['id'] as int? ?? 0,
+      id: int.parse(json['id'].toString()),
       question: json['question'] as String? ?? '',
       options: (json['options'] as List?)?.map((o) => QuizOption.fromJson(o)).toList() ?? [],
     );
@@ -60,16 +60,22 @@ class QuizQuestion {
 class QuizOption {
   final int id;
   final String text;
+  final String? explanation;
+  final int? quizId;
 
   QuizOption({
     required this.id,
     required this.text,
+    this.explanation,
+    this.quizId,
   });
 
   factory QuizOption.fromJson(Map<String, dynamic> json) {
     return QuizOption(
-      id: json['id'] as int? ?? 0,
+      id: int.parse(json['id'].toString()),
       text: json['text'] as String? ?? '',
+      explanation: json['explanation'] as String?,
+      quizId: json['quiz_id'] != null ? int.tryParse(json['quiz_id'].toString()) : null,
     );
   }
 } 
