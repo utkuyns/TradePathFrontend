@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:lottie/lottie.dart';
 
 class TradeScreen extends StatefulWidget {
   const TradeScreen({super.key});
@@ -23,9 +24,12 @@ class _TradeScreenState extends State<TradeScreen> {
   double? _stockPrice;
   double? _totalAmount;
   double? _virtualBalance;
+  double? _aiPrediction;
+  double? _aiPredictionConfidence;
   bool _isLoading = false;
   bool _notificationSwitch = false;
   bool _emailSwitch = false;
+  bool _isAiLoading = false;
 
   static const String _baseUrl = 'http://10.0.2.2:8080';
   static const String _stocksEndpoint = '/api/stocks';
@@ -101,6 +105,55 @@ class _TradeScreenState extends State<TradeScreen> {
     });
   }
 
+  Future<void> _fetchAiPrediction(String symbol) async {
+    print('🔍 _fetchAiPrediction called for symbol: $symbol');
+    setState(() {
+      _isAiLoading = true;
+      _aiPrediction = null;
+      _aiPredictionConfidence = null;
+    });
+    final token = await _storage.read(key: 'jwt');
+    final url = Uri.parse('$_baseUrl/api/predictions/symbol/$symbol');
+    print('🌐 Making request to: $url');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+      print('📡 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('📊 Parsed data: $data');
+        if (data is List && data.isNotEmpty) {
+          final firstPrediction = data[0];
+          print('🎯 First prediction: $firstPrediction');
+          setState(() {
+            _aiPrediction = (firstPrediction['predictedClosePrice'] as num?)?.toDouble();
+            _aiPredictionConfidence = (firstPrediction['confidenceScore'] as num?)?.toDouble();
+          });
+          print('✅ AI Prediction set: $_aiPrediction, Confidence: $_aiPredictionConfidence');
+        } else {
+          print('❌ Data is empty or not a list');
+          setState(() {
+            _aiPrediction = null;
+            _aiPredictionConfidence = null;
+          });
+        }
+      } else {
+        print('❌ Request failed with status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('💥 Exception in _fetchAiPrediction: $e');
+    }
+    setState(() {
+      _isAiLoading = false;
+    });
+  }
+
   void _onStockSelected(Map<String, dynamic> stock) {
     setState(() {
       _selectedStock = stock;
@@ -109,6 +162,7 @@ class _TradeScreenState extends State<TradeScreen> {
       _filteredStocks = [];
     });
     _updateTotalAmount();
+    _fetchAiPrediction(stock['symbol']);
     FocusScope.of(context).requestFocus(_quantityFocus);
     FocusScope.of(context).unfocus();
   }
@@ -265,6 +319,15 @@ class _TradeScreenState extends State<TradeScreen> {
                               controller: _stockController,
                               focusNode: _stockFocus,
                               onChanged: _onStockSearch,
+                              onSubmitted: (value) {
+                                final found = _allStocks.firstWhere(
+                                  (stock) => stock['symbol'].toString().toLowerCase() == value.toLowerCase(),
+                                  orElse: () => null,
+                                );
+                                if (found != null) {
+                                  _onStockSelected(found);
+                                }
+                              },
                               style: TextStyle(fontSize: 18, color: textColor),
                               decoration: InputDecoration(
                                 hintText: 'Type stock name or symbol',
@@ -324,17 +387,63 @@ class _TradeScreenState extends State<TradeScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                            decoration: BoxDecoration(
-                              color: boxColor,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: primaryColor.withOpacity(0.08)),
-                            ),
-                            child: Text(
-                              _stockPrice != null ? '${_stockPrice!.toStringAsFixed(2)} USD' : 'Select',
-                              style: TextStyle(fontSize: 18, color: textColor, fontWeight: FontWeight.w600),
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                                  decoration: BoxDecoration(
+                                    color: boxColor,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: primaryColor.withOpacity(0.08)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _stockPrice != null ? '${_stockPrice!.toStringAsFixed(2)} USD' : 'Select',
+                                        style: TextStyle(fontSize: 18, color: textColor, fontWeight: FontWeight.w600),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text('Current', style: TextStyle(fontSize: 13, color: textColor.withOpacity(0.6))),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                                  decoration: BoxDecoration(
+                                    color: boxColor,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: primaryColor.withOpacity(0.08)),
+                                  ),
+                                  child: _isAiLoading
+                                      ? Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: primaryColor)))
+                                      : Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _aiPrediction != null ? '${_aiPrediction!.toStringAsFixed(2)} USD' : '-',
+                                              style: TextStyle(fontSize: 18, color: textColor, fontWeight: FontWeight.w600),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Text('AI Prediction', style: TextStyle(fontSize: 13, color: textColor.withOpacity(0.6))),
+                                                if (_aiPredictionConfidence != null)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(left: 4),
+                                                    child: Text('(${(_aiPredictionConfidence! * 100).toStringAsFixed(0)}%)', style: TextStyle(fontSize: 12, color: primaryColor, fontWeight: FontWeight.w500)),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 24),
                           Row(

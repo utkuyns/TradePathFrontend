@@ -41,6 +41,7 @@ flutter:
     - assets/animations/sun.json
     - assets/animations/newsun2.json
     - assets/animations/tree.json
+    - assets/animations/ai.json
 # flutter_launcher_icons configuration should be at the root level
 flutter_launcher_icons:
   android: true

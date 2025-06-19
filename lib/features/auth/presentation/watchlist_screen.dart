@@ -11,10 +11,12 @@ import 'profile_screen.dart';
 import '../data/auth_service.dart';
 import 'homepage.dart'; // HomeService ve MiniChartPainter için
 import 'edu_path_entry_screen.dart';
+import 'package:lottie/lottie.dart';
 
 class WatchlistService {
   static const _baseUrl = 'http://10.0.2.2:8080';
   static const _watchlistEndpoint = '/api/watchlist';
+  static const _recommendationEndpoint = '/api/v1/recommendations/symbol';
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<List<WatchlistItemModel>> fetchWatchlist() async {
@@ -71,6 +73,26 @@ class WatchlistService {
       throw Exception('Failed to remove from watchlist');
     }
   }
+
+  Future<Map<String, dynamic>?> fetchRecommendation(String symbol) async {
+    final token = await _storage.read(key: 'jwt');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+    final response = await http.get(
+      Uri.parse('$_baseUrl$_recommendationEndpoint/$symbol'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data;
+    } else {
+      return null;
+    }
+  }
 }
 
 class WatchlistScreen extends StatefulWidget {
@@ -83,6 +105,7 @@ class WatchlistScreen extends StatefulWidget {
 class _WatchlistScreenState extends State<WatchlistScreen> {
   late Future<List<WatchlistItemModel>> _watchlistFuture;
   int _selectedIndex = 0;
+  final WatchlistService _watchlistService = WatchlistService();
 
   @override
   void initState() {
@@ -144,6 +167,434 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       context,
       MaterialPageRoute(builder: (context) => const StockSearchScreen()),
     ).then((_) => _refreshWatchlist());
+  }
+
+  void _showRecommendationDialog(String symbol) async {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return const Center(child: CircularProgressIndicator(color: Color(0xFF2A3FFF)));
+      },
+    );
+    
+    try {
+      final recommendation = await _watchlistService.fetchRecommendation(symbol);
+      Navigator.of(context).pop(); // Close loading dialog
+      
+      if (recommendation != null) {
+        showGeneralDialog(
+          context: context,
+          barrierDismissible: true,
+          barrierLabel: '',
+          barrierColor: Colors.black54,
+          transitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return Stack(
+              children: [
+                Container(
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEDF0FF), Color(0xFFFFFFFF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: const Color(0xFF2A3FFF).withOpacity(0.1),
+                      width: 1,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A3FFF).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: Lottie.asset(
+                                  'assets/animations/ai.json',
+                                  repeat: true,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$symbol Recommendation',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF181A20),
+                                    ),
+                                  ),
+                                  Text(
+                                    'AI Analysis',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: const Color(0xFF181A20).withOpacity(0.6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Recommendation Content
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.trending_up,
+                                    color: const Color(0xFF2A3FFF),
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Recommendation',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF181A20),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                recommendation['recommendation']?.toString() ?? 'No recommendation available',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF181A20),
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (recommendation['reason'] != null) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      color: const Color(0xFF2A3FFF),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Analysis Reason',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF181A20),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  recommendation['reason'].toString(),
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: const Color(0xFF181A20).withOpacity(0.8),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if (recommendation['targetPrice'] != null) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF27AE60), Color(0xFF2ECC71)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF27AE60).withOpacity(0.3),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.attach_money,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Target Price',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      '\$${recommendation['targetPrice']}',
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+          transitionBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            );
+          },
+        );
+      } else {
+        showGeneralDialog(
+          context: context,
+          barrierDismissible: true,
+          barrierLabel: '',
+          barrierColor: Colors.black54,
+          transitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return Center(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEDF0FF), Color(0xFFFFFFFF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: const Color(0xFF2A3FFF).withOpacity(0.1),
+                      width: 1,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A3FFF).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: Lottie.asset(
+                                  'assets/animations/ai.json',
+                                  repeat: true,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$symbol Recommendation',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF181A20),
+                                    ),
+                                  ),
+                                  Text(
+                                    'AI Analysis',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: const Color(0xFF181A20).withOpacity(0.6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // No Recommendation Content
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off,
+                                color: const Color(0xFF181A20).withOpacity(0.4),
+                                size: 48,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No Recommendation Available',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF181A20).withOpacity(0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Our AI hasn\'t generated a recommendation for $symbol yet. Please check back later.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: const Color(0xFF181A20).withOpacity(0.6),
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+          transitionBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            );
+          },
+        );
+      }
+    } catch (e) {
+      Navigator.of(context).pop(); // Close loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load recommendation: $e')),
+      );
+    }
   }
 
   @override
@@ -252,38 +703,78 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                       child: const Icon(Icons.delete, color: Colors.white),
                     ),
                     onDismissed: (direction) {
-                      WatchlistService().removeFromWatchlist(item.symbol).then((_) {
+                      _watchlistService.removeFromWatchlist(item.symbol).then((_) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('${item.symbol} removed from watchlist')),
                         );
                         _refreshWatchlist();
                       });
                     },
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          // Logo/Avatar
-                          CircleAvatar(
-                            backgroundColor: primaryColor.withOpacity(0.15),
-                            child: Text(
-                              item.symbol.isNotEmpty ? item.symbol[0] : '?',
-                              style: TextStyle(
-                                color: primaryColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                    child: GestureDetector(
+                      onLongPress: () => _showRecommendationDialog(item.symbol),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            // Logo/Avatar
+                            CircleAvatar(
+                              backgroundColor: primaryColor.withOpacity(0.15),
+                              child: Text(
+                                item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              radius: 24,
+                            ),
+                            const SizedBox(width: 16),
+                            // Symbol ve şirket adı
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.symbol,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: textColor,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                  Text(
+                                    item.companyName,
+                                    style: TextStyle(
+                                      color: textColor.withOpacity(0.7),
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            radius: 24,
-                          ),
-                          const SizedBox(width: 16),
-                          // Symbol ve şirket adı
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            // Fiyat grafiği (gerçek sparkline olarak)
+                            Container(
+                              width: 80,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: CustomPaint(
+                                painter: MiniChartPainter(
+                                  data: item.sparkline,
+                                  color: isPositive ? Colors.green : Colors.red,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            // Fiyat ve değişim
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  item.symbol,
+                                  '\$${item.currentPrice.toStringAsFixed(2)}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: textColor,
@@ -291,54 +782,17 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                                   ),
                                 ),
                                 Text(
-                                  item.companyName,
+                                  '${isPositive ? '+' : ''}${item.priceChangePercentage.toStringAsFixed(2)}%',
                                   style: TextStyle(
-                                    color: textColor.withOpacity(0.7),
+                                    color: isPositive ? Colors.green : Colors.red,
+                                    fontWeight: FontWeight.w500,
                                     fontSize: 14,
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          // Fiyat grafiği (gerçek sparkline olarak)
-                          Container(
-                            width: 80,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: CustomPaint(
-                              painter: MiniChartPainter(
-                                data: item.sparkline,
-                                color: isPositive ? Colors.green : Colors.red,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // Fiyat ve değişim
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '\$${item.currentPrice.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: textColor,
-                                  fontSize: 18,
-                                ),
-                              ),
-                              Text(
-                                '${isPositive ? '+' : ''}${item.priceChangePercentage.toStringAsFixed(2)}%',
-                                style: TextStyle(
-                                  color: isPositive ? Colors.green : Colors.red,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

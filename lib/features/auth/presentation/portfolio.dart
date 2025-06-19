@@ -9,6 +9,8 @@ import 'profile_screen.dart';
 import 'homepage.dart';
 import 'package:lottie/lottie.dart';
 import 'edu_path_entry_screen.dart';
+import 'dart:async';
+import 'package:flutter/cupertino.dart';
 
 class NetWorthModel {
   final double virtualBalance;
@@ -118,13 +120,13 @@ class _PortfolioScreenState extends State<PortfolioScreen> with TickerProviderSt
   bool _showPieChart = false;
   late AnimationController _pieChartController;
   late Animation<double> _pieChartAnimation;
+  Timer? _autoRefreshTimer;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
     super.initState();
-    _portfolioFuture = PortfolioService().fetchPortfolio();
-    _netWorthFuture = PortfolioService().fetchNetWorth();
-    
+    _refreshPortfolio();
     // Pasta grafiği animasyonu için controller
     _pieChartController = AnimationController(
       duration: const Duration(milliseconds: 2000),
@@ -134,12 +136,28 @@ class _PortfolioScreenState extends State<PortfolioScreen> with TickerProviderSt
       parent: _pieChartController,
       curve: Curves.easeOutBack,
     );
+    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 2), (_) => _refreshPortfolio(withEffect: true));
   }
 
   @override
   void dispose() {
     _pieChartController.dispose();
+    _autoRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _refreshPortfolio({bool withEffect = false}) async {
+    if (withEffect) setState(() => _isRefreshing = true);
+    setState(() {
+      _portfolioFuture = PortfolioService().fetchPortfolio();
+      _netWorthFuture = PortfolioService().fetchNetWorth();
+      _buyPrices.clear();
+    });
+    if (withEffect) {
+      // En az 1 saniye shimmer göster
+      await Future.delayed(const Duration(milliseconds: 1000));
+      setState(() => _isRefreshing = false);
+    }
   }
 
   Future<void> _fetchBuyPrices(List<PortfolioItemModel> items) async {
@@ -251,306 +269,330 @@ class _PortfolioScreenState extends State<PortfolioScreen> with TickerProviderSt
               final items = snapshot.data!;
               _fetchBuyPrices(items);
               final netWorth = netWorthSnapshot.data!;
-              return Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    // Modern ve şık 3 değerli özet kutusu
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 2.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Expanded(
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 6),
-                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF7F8FA),
-                                borderRadius: BorderRadius.circular(22),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.indigo[800]!.withOpacity(0.38),
-                                    blurRadius: 28,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('Portfolio', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    netWorth.portfolioValue.toStringAsFixed(2),
-                                    style: TextStyle(fontSize: 20, color: Colors.indigo[700], fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('Stock Value', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 6),
-                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF7F8FA),
-                                borderRadius: BorderRadius.circular(22),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.green[800]!.withOpacity(0.38),
-                                    blurRadius: 28,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('Cash', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    netWorth.virtualBalance.toStringAsFixed(2),
-                                    style: TextStyle(fontSize: 20, color: Colors.green[700], fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('Available Balance', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 6),
-                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF7F8FA),
-                                borderRadius: BorderRadius.circular(22),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blue[800]!.withOpacity(0.38),
-                                    blurRadius: 28,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('Total', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    netWorth.netWorth.toStringAsFixed(2),
-                                    style: TextStyle(fontSize: 20, color: Colors.blue[800], fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('Total Assets', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    
-                    // Pasta Grafiği veya Tablo Başlığı
-                    if (_showPieChart) ...[
-                      // Pasta Grafiği
-                      Container(
-                        height: 300,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Portfolio Distribution',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Expanded(
-                              child: AnimatedBuilder(
-                                animation: _pieChartAnimation,
-                                builder: (context, child) {
-                                  return GestureDetector(
-                                    onTapUp: (details) {
-                                      _handlePieChartTap(details, items, context);
-                                    },
-                                    child: CustomPieChart(
-                                      items: items,
-                                      primaryColor: primaryColor,
-                                      animationValue: _pieChartAnimation.value,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ] else ...[
-                      // Tablo başlığı
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: boxColor.withOpacity(0.85),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+              return RefreshIndicator(
+                onRefresh: () => _refreshPortfolio(withEffect: true),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      // Modern ve şık 3 değerli özet kutusu
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 2.0),
                         child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            Expanded(flex: 4, child: Text('Symbol', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-                            Expanded(flex: 2, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                            Expanded(flex: 3, child: Text('Avg. Cost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                            Expanded(flex: 3, child: Text('Current', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                            Expanded(flex: 2, child: Text('%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    
-                    // Liste
-                    Expanded(
-                      child: _showPieChart 
-                        ? _buildPieChartLegend(items, textColor)
-                        : ListView.separated(
-                            itemCount: items.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
-                            itemBuilder: (context, index) {
-                              final item = items[index];
-                              final buyPrice = _buyPrices[item.symbol] ?? 0.0;
-                              final double currentPrice = item.currentPrice;
-                              final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
-                              Color percentColor;
-                              if (changePercent > 0) {
-                                percentColor = Colors.green;
-                              } else if (changePercent < 0) {
-                                percentColor = Colors.red;
-                              } else {
-                                percentColor = Colors.amber[700]!;
-                              }
-                              return Container(
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                            Expanded(
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 6),
+                                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
+                                  color: const Color(0xFFF7F8FA),
+                                  borderRadius: BorderRadius.circular(22),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
+                                      color: Colors.indigo[800]!.withOpacity(0.38),
+                                      blurRadius: 28,
+                                      spreadRadius: 2,
+                                      offset: const Offset(0, 10),
                                     ),
                                   ],
                                 ),
-                                child: Row(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Symbol + şirket adı
-                                    Expanded(
-                                      flex: 4,
+                                    Text('Portfolio', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      netWorth.portfolioValue.toStringAsFixed(2),
+                                      style: TextStyle(fontSize: 20, color: Colors.indigo[700], fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text('Stock Value', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 6),
+                                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF7F8FA),
+                                  borderRadius: BorderRadius.circular(22),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.green[800]!.withOpacity(0.38),
+                                      blurRadius: 28,
+                                      spreadRadius: 2,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('Cash', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      netWorth.virtualBalance.toStringAsFixed(2),
+                                      style: TextStyle(fontSize: 20, color: Colors.green[700], fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text('Available Balance', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 6),
+                                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF7F8FA),
+                                  borderRadius: BorderRadius.circular(22),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.blue[800]!.withOpacity(0.38),
+                                      blurRadius: 28,
+                                      spreadRadius: 2,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('Total', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      netWorth.netWorth.toStringAsFixed(2),
+                                      style: TextStyle(fontSize: 20, color: Colors.blue[800], fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text('Total Assets', style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      
+                      // Pasta Grafiği veya Tablo Başlığı
+                      if (_showPieChart) ...[
+                        // Pasta Grafiği
+                        Container(
+                          height: 300,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                'Portfolio Distribution',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Expanded(
+                                child: AnimatedBuilder(
+                                  animation: _pieChartAnimation,
+                                  builder: (context, child) {
+                                    return GestureDetector(
+                                      onTapUp: (details) {
+                                        _handlePieChartTap(details, items, context);
+                                      },
+                                      child: CustomPieChart(
+                                        items: items,
+                                        primaryColor: primaryColor,
+                                        animationValue: _pieChartAnimation.value,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ] else ...[
+                        // Tablo başlığı
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: boxColor.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 4, child: Text('Symbol', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+                              Expanded(flex: 2, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                              Expanded(flex: 3, child: Text('Avg. Cost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                              Expanded(flex: 3, child: Text('Current', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                              Expanded(flex: 2, child: Text('%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      
+                      // Liste
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Stack(
+                              children: [
+                                ListView.builder(
+                                  itemCount: items.length,
+                                  itemBuilder: (context, index) {
+                                    final item = items[index];
+                                    final buyPrice = _buyPrices[item.symbol] ?? 0.0;
+                                    final double currentPrice = item.currentPrice;
+                                    final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
+                                    Color percentColor;
+                                    if (changePercent > 0) {
+                                      percentColor = Colors.green;
+                                    } else if (changePercent < 0) {
+                                      percentColor = Colors.red;
+                                    } else {
+                                      percentColor = Colors.amber[700]!;
+                                    }
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(14),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
                                       child: Row(
                                         children: [
-                                          CircleAvatar(
-                                            backgroundColor: primaryColor.withOpacity(0.16),
-                                            child: Text(
-                                              item.symbol.isNotEmpty ? item.symbol[0] : '?',
-                                              style: TextStyle(
-                                                color: primaryColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                            radius: 16,
-                                          ),
-                                          const SizedBox(width: 8),
+                                          // Symbol + şirket adı
                                           Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                            flex: 4,
+                                            child: Row(
                                               children: [
-                                                Text(
-                                                  item.symbol,
-                                                  style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
-                                                  overflow: TextOverflow.ellipsis,
-                                                  maxLines: 1,
+                                                CircleAvatar(
+                                                  backgroundColor: primaryColor.withOpacity(0.16),
+                                                  child: Text(
+                                                    item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                                                    style: TextStyle(
+                                                      color: primaryColor,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                  radius: 16,
                                                 ),
-                                                Text(
-                                                  item.companyName,
-                                                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        item.symbol,
+                                                        style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
+                                                        overflow: TextOverflow.ellipsis,
+                                                        maxLines: 1,
+                                                      ),
+                                                      Text(
+                                                        item.companyName,
+                                                        style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ],
                                             ),
                                           ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              '${item.quantity}',
+                                              style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 3,
+                                            child: Text(
+                                              buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}',
+                                              style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 14),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 3,
+                                            child: Text(
+                                              '\$${item.currentPrice.toStringAsFixed(2)}',
+                                              style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Container(
+                                              alignment: Alignment.center,
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: percentColor.withOpacity(0.16),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
+                                                style: TextStyle(color: percentColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        '${item.quantity}',
-                                        style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(
-                                        buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}',
-                                        style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 14),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(
-                                        '\$${item.currentPrice.toStringAsFixed(2)}',
-                                        style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Container(
-                                        alignment: Alignment.center,
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: percentColor.withOpacity(0.16),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
-                                          style: TextStyle(color: percentColor, fontWeight: FontWeight.bold, fontSize: 12),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                    );
+                                  },
                                 ),
-                              );
-                            },
-                          ),
-                    ),
-                  ],
+                                if (_isRefreshing)
+                                  Positioned.fill(
+                                    child: AnimatedOpacity(
+                                      opacity: _isRefreshing ? 1.0 : 0.0,
+                                      duration: const Duration(milliseconds: 400),
+                                      child: Container(
+                                        color: Colors.white.withOpacity(0.7),
+                                        child: Center(
+                                          child: CupertinoActivityIndicator(
+                                            radius: 14,
+                                            color: primaryColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
