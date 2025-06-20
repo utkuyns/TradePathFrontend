@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../domain/user_model.dart';
 import 'package:flutter/material.dart';
 import '../domain/badge_model.dart';
+import '../../../core/network/http_interceptor.dart';
 
 class AuthService {
   static const _baseUrl = 'http://10.0.2.2:8080'; // TODO: Config dosyasından al
@@ -102,22 +103,13 @@ class AuthService {
       return null;
     }
 
-    final url = Uri.parse('$_baseUrl$_userMeEndpoint');
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+    final response = await HttpInterceptor.get(
+      Uri.parse('$_baseUrl$_userMeEndpoint'),
     );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return UserModel.fromJson(data);
-    } else if (response.statusCode == 401) {
-      // Token geçersiz, kullanıcıyı login sayfasına yönlendir
-      await _storage.delete(key: 'jwt');
-      _redirectToLogin();
     }
     return null;
   }
@@ -129,26 +121,15 @@ class AuthService {
       return false;
     }
 
-    final url = Uri.parse('$_baseUrl$_userMeEndpoint');
     final body = {
       'fullName': fullName,
       if (password != null && password.isNotEmpty) 'password': password,
     };
 
-    final response = await http.put(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+    final response = await HttpInterceptor.put(
+      Uri.parse('$_baseUrl$_userMeEndpoint'),
       body: jsonEncode(body),
     );
-
-    if (response.statusCode == 401) {
-      await _storage.delete(key: 'jwt');
-      _redirectToLogin();
-      return false;
-    }
 
     return response.statusCode == 200;
   }
@@ -173,20 +154,14 @@ class AuthService {
       _redirectToLogin();
       return [];
     }
-    final url = Uri.parse('$_baseUrl$_badgesDetailedEndpoint');
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+    
+    final response = await HttpInterceptor.get(
+      Uri.parse('$_baseUrl$_badgesDetailedEndpoint'),
     );
+    
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => BadgeModel.fromJson(e)).toList();
-    } else if (response.statusCode == 401) {
-      await _storage.delete(key: 'jwt');
-      _redirectToLogin();
     }
     return [];
   }

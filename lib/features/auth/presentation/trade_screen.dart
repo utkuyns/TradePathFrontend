@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:lottie/lottie.dart';
+import '../../../core/network/http_interceptor.dart';
 
 class TradeScreen extends StatefulWidget {
   const TradeScreen({super.key});
@@ -47,14 +48,10 @@ class _TradeScreenState extends State<TradeScreen> {
   }
 
   Future<void> _fetchStocks() async {
-    final token = await _storage.read(key: 'jwt');
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_stocksEndpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       setState(() {
         _allStocks = jsonDecode(response.body);
@@ -64,14 +61,10 @@ class _TradeScreenState extends State<TradeScreen> {
   }
 
   Future<void> _fetchUserBalance() async {
-    final token = await _storage.read(key: 'jwt');
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_userMeEndpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       setState(() {
@@ -112,17 +105,10 @@ class _TradeScreenState extends State<TradeScreen> {
       _aiPrediction = null;
       _aiPredictionConfidence = null;
     });
-    final token = await _storage.read(key: 'jwt');
     final url = Uri.parse('$_baseUrl/api/predictions/symbol/$symbol');
     print('🌐 Making request to: $url');
     try {
-      final response = await http.get(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await HttpInterceptor.get(url);
       print('📡 Response status: ${response.statusCode}');
       print('📄 Response body: ${response.body}');
       if (response.statusCode == 200) {
@@ -170,18 +156,13 @@ class _TradeScreenState extends State<TradeScreen> {
   Future<void> _handleTrade({required bool isBuy}) async {
     if (_selectedStock == null || _quantityController.text.isEmpty) return;
     setState(() => _isLoading = true);
-    final token = await _storage.read(key: 'jwt');
     final endpoint = isBuy ? _buyEndpoint : _sellEndpoint;
     final body = jsonEncode({
       'symbol': _selectedStock!['symbol'],
       'quantity': int.tryParse(_quantityController.text) ?? 0,
     });
-    final response = await http.post(
+    final response = await HttpInterceptor.post(
       Uri.parse('$_baseUrl$endpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
       body: body,
     );
     setState(() => _isLoading = false);

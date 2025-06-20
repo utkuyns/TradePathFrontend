@@ -11,6 +11,7 @@ import 'package:lottie/lottie.dart';
 import 'edu_path_entry_screen.dart';
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import '../../../core/network/http_interceptor.dart';
 
 class NetWorthModel {
   final double virtualBalance;
@@ -39,20 +40,12 @@ class PortfolioService {
   static const _baseUrl = 'http://10.0.2.2:8080';
   static const _portfolioEndpoint = '/api/portfolio/my-holdings';
   static const _netWorthEndpoint = '/api/portfolio/my-net-worth';
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<List<PortfolioItemModel>> fetchPortfolio() async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_portfolioEndpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => PortfolioItemModel.fromJson(e)).toList();
@@ -62,17 +55,10 @@ class PortfolioService {
   }
 
   Future<NetWorthModel> fetchNetWorth() async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_netWorthEndpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return NetWorthModel.fromJson(data);
@@ -82,14 +68,10 @@ class PortfolioService {
   }
 
   Future<double> fetchLastBuyPrice(String symbol) async {
-    final token = await _storage.read(key: 'jwt');
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl/api/trades/history'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final List<dynamic> trades = jsonDecode(response.body);
       // Sadece ilgili sembol ve alış işlemleri (quantity > 0)
@@ -428,8 +410,26 @@ class _PortfolioScreenState extends State<PortfolioScreen> with TickerProviderSt
                           ),
                         ),
                         const SizedBox(height: 20),
+                        
+                        // Pie Chart için yeni tablo başlığı
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: boxColor.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 4, child: Text('Stock', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+                              Expanded(flex: 2, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                              Expanded(flex: 3, child: Text('Value', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                              Expanded(flex: 2, child: Text('%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
                       ] else ...[
-                        // Tablo başlığı
+                        // Normal tablo başlığı
                         Container(
                           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
                           decoration: BoxDecoration(
@@ -459,115 +459,235 @@ class _PortfolioScreenState extends State<PortfolioScreen> with TickerProviderSt
                                   itemCount: items.length,
                                   itemBuilder: (context, index) {
                                     final item = items[index];
-                                    final buyPrice = _buyPrices[item.symbol] ?? 0.0;
-                                    final double currentPrice = item.currentPrice;
-                                    final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
-                                    Color percentColor;
-                                    if (changePercent > 0) {
-                                      percentColor = Colors.green;
-                                    } else if (changePercent < 0) {
-                                      percentColor = Colors.red;
-                                    } else {
-                                      percentColor = Colors.amber[700]!;
-                                    }
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(14),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.05),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          // Symbol + şirket adı
-                                          Expanded(
-                                            flex: 4,
-                                            child: Row(
-                                              children: [
-                                                CircleAvatar(
-                                                  backgroundColor: primaryColor.withOpacity(0.16),
-                                                  child: Text(
-                                                    item.symbol.isNotEmpty ? item.symbol[0] : '?',
-                                                    style: TextStyle(
-                                                      color: primaryColor,
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
+                                    
+                                    if (_showPieChart) {
+                                      // Pie Chart için yeni tablo tasarımı
+                                      final totalValue = _getTotalValue(items);
+                                      final percentage = totalValue > 0 ? (item.totalValue / totalValue) * 100 : 0.0;
+                                      final List<Color> colors = [
+                                        const Color(0xFF2A3FFF),
+                                        const Color(0xFF4CAF50),
+                                        const Color(0xFFFF9800),
+                                        const Color(0xFFE91E63),
+                                        const Color(0xFF9C27B0),
+                                        const Color(0xFF00BCD4),
+                                        const Color(0xFF795548),
+                                        const Color(0xFF607D8B),
+                                      ];
+                                      final color = colors[index % colors.length];
+                                      
+                                      return Container(
+                                        margin: const EdgeInsets.only(bottom: 8),
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(14),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.05),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            // Renk göstergesi + Symbol + şirket adı
+                                            Expanded(
+                                              flex: 4,
+                                              child: Row(
+                                                children: [
+                                                  Container(
+                                                    width: 12,
+                                                    height: 12,
+                                                    decoration: BoxDecoration(
+                                                      color: color,
+                                                      borderRadius: BorderRadius.circular(6),
                                                     ),
                                                   ),
-                                                  radius: 16,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        item.symbol,
-                                                        style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
-                                                        overflow: TextOverflow.ellipsis,
-                                                        maxLines: 1,
+                                                  const SizedBox(width: 8),
+                                                  CircleAvatar(
+                                                    backgroundColor: color.withOpacity(0.16),
+                                                    child: Text(
+                                                      item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                                                      style: TextStyle(
+                                                        color: color,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 14,
                                                       ),
-                                                      Text(
-                                                        item.companyName,
-                                                        style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ],
+                                                    ),
+                                                    radius: 14,
                                                   ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Text(
-                                              '${item.quantity}',
-                                              style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            flex: 3,
-                                            child: Text(
-                                              buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}',
-                                              style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 14),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            flex: 3,
-                                            child: Text(
-                                              '\$${item.currentPrice.toStringAsFixed(2)}',
-                                              style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Container(
-                                              alignment: Alignment.center,
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: percentColor.withOpacity(0.16),
-                                                borderRadius: BorderRadius.circular(8),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          item.symbol,
+                                                          style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
+                                                          overflow: TextOverflow.ellipsis,
+                                                          maxLines: 1,
+                                                        ),
+                                                        Text(
+                                                          item.companyName,
+                                                          style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
                                               child: Text(
-                                                '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
-                                                style: TextStyle(color: percentColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                                '${item.quantity}',
+                                                style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
                                                 textAlign: TextAlign.center,
                                               ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                '\$${item.totalValue.toStringAsFixed(2)}',
+                                                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Container(
+                                                alignment: Alignment.center,
+                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: color.withOpacity(0.16),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Text(
+                                                  '${percentage.toStringAsFixed(1)}%',
+                                                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    } else {
+                                      // Normal tablo tasarımı
+                                      final buyPrice = _buyPrices[item.symbol] ?? 0.0;
+                                      final double currentPrice = item.currentPrice;
+                                      final double changePercent = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
+                                      Color percentColor;
+                                      if (changePercent > 0) {
+                                        percentColor = Colors.green;
+                                      } else if (changePercent < 0) {
+                                        percentColor = Colors.red;
+                                      } else {
+                                        percentColor = Colors.amber[700]!;
+                                      }
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(14),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.05),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            // Symbol + şirket adı
+                                            Expanded(
+                                              flex: 4,
+                                              child: Row(
+                                                children: [
+                                                  CircleAvatar(
+                                                    backgroundColor: primaryColor.withOpacity(0.16),
+                                                    child: Text(
+                                                      item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                                                      style: TextStyle(
+                                                        color: primaryColor,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 16,
+                                                      ),
+                                                    ),
+                                                    radius: 16,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          item.symbol,
+                                                          style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 15),
+                                                          overflow: TextOverflow.ellipsis,
+                                                          maxLines: 1,
+                                                        ),
+                                                        Text(
+                                                          item.companyName,
+                                                          style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                '${item.quantity}',
+                                                style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 14),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                buyPrice == 0.0 ? '-' : '\$${buyPrice.toStringAsFixed(2)}',
+                                                style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 14),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                '\$${item.currentPrice.toStringAsFixed(2)}',
+                                                style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Container(
+                                                alignment: Alignment.center,
+                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: percentColor.withOpacity(0.16),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Text(
+                                                  '${changePercent >= 0 ? '+' : ''}${changePercent.toStringAsFixed(2)}%',
+                                                  style: TextStyle(color: percentColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }
                                   },
                                 ),
                                 if (_isRefreshing)

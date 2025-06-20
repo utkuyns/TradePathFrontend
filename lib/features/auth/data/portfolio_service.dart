@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../domain/portfolio_item_model.dart';
+import '../../../core/network/http_interceptor.dart';
 
 class PortfolioService {
   static const _baseUrl = 'http://10.0.2.2:8080';
@@ -9,14 +10,10 @@ class PortfolioService {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<List<PortfolioItemModel>> fetchPortfolio() async {
-    final token = await _storage.read(key: 'jwt');
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_portfolioEndpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => PortfolioItemModel.fromJson(e)).toList();
@@ -26,14 +23,10 @@ class PortfolioService {
   }
 
   Future<double> fetchLastBuyPrice(String symbol) async {
-    final token = await _storage.read(key: 'jwt');
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl/api/trades/history'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final List<dynamic> trades = jsonDecode(response.body);
       final buys = trades.where((t) => t['symbol'] == symbol && (t['quantity'] ?? 0) > 0).toList();

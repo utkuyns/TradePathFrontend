@@ -13,6 +13,7 @@ import 'profile_screen.dart';
 import '../data/auth_service.dart';
 import 'edu_path_entry_screen.dart';
 import '../data/portfolio_service.dart' as data;
+import '../../../core/network/http_interceptor.dart';
 
 class StockGainsModel {
   final double value;
@@ -50,20 +51,12 @@ class HomeService {
   static const _portfolioSnapshotsEndpoint = '/api/portfolio/snapshots';
   static const _userInfoEndpoint = '/api/user/info';
   static const _portfolioEndpoint = '/api/portfolio/my-holdings';
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<List<WatchlistItemModel>> fetchWatchlist() async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_watchlistEndpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => WatchlistItemModel.fromJson(e)).toList();
@@ -73,18 +66,11 @@ class HomeService {
   }
 
   Future<StockGainsModel> fetchStockGains() async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
     try {
-      final response = await http.get(
+      final response = await HttpInterceptor.get(
         Uri.parse('$_baseUrl$_portfolioSnapshotsEndpoint'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
       );
+      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is List) {
@@ -99,18 +85,9 @@ class HomeService {
   }
 
   Future<String> fetchUserName() async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    
     try {
-      final response = await http.get(
+      final response = await HttpInterceptor.get(
         Uri.parse('$_baseUrl/api/users/me'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
       );
       
       if (response.statusCode == 200) {
@@ -125,18 +102,9 @@ class HomeService {
   }
 
   Future<List<PortfolioItemModel>> fetchPortfolio() async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    
     try {
-      final response = await http.get(
+      final response = await HttpInterceptor.get(
         Uri.parse('$_baseUrl$_portfolioEndpoint'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
       );
       
       if (response.statusCode == 200) {
@@ -187,17 +155,10 @@ class HomeService {
   }
 
   Future<List<double>> fetchSparkline(String symbol) async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl/api/intraday/$symbol'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     try {
       final data = jsonDecode(response.body);
       if (data is List) {

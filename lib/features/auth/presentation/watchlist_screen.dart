@@ -12,25 +12,18 @@ import '../data/auth_service.dart';
 import 'homepage.dart'; // HomeService ve MiniChartPainter için
 import 'edu_path_entry_screen.dart';
 import 'package:lottie/lottie.dart';
+import '../../../core/network/http_interceptor.dart';
 
 class WatchlistService {
   static const _baseUrl = 'http://10.0.2.2:8080';
   static const _watchlistEndpoint = '/api/watchlist';
   static const _recommendationEndpoint = '/api/v1/recommendations/symbol';
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<List<WatchlistItemModel>> fetchWatchlist() async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_watchlistEndpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => WatchlistItemModel.fromJson(e)).toList();
@@ -40,52 +33,31 @@ class WatchlistService {
   }
 
   Future<void> addToWatchlist(String symbol) async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.post(
+    final response = await HttpInterceptor.post(
       Uri.parse('$_baseUrl$_watchlistEndpoint/add'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
       body: jsonEncode({'symbol': symbol}),
     );
+    
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception('Failed to add to watchlist');
     }
   }
 
   Future<void> removeFromWatchlist(String symbol) async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.delete(
+    final response = await HttpInterceptor.delete(
       Uri.parse('$_baseUrl$_watchlistEndpoint/remove/$symbol'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode != 200) {
       throw Exception('Failed to remove from watchlist');
     }
   }
 
   Future<Map<String, dynamic>?> fetchRecommendation(String symbol) async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_recommendationEndpoint/$symbol'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data;

@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../data/auth_service.dart';
 import '../domain/user_model.dart';
-import 'login_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../domain/badge_model.dart';
+import '../data/auth_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:tradepath/features/auth/presentation/profile_details_page.dart';
-import 'trade_screen.dart';
-import 'portfolio.dart';
 import 'homepage.dart';
-import '../domain/badge_model.dart';
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'portfolio.dart';
+import 'trade_screen.dart';
+import 'profile_details_page.dart';
 import 'account_settings_page.dart';
 import 'package:lottie/lottie.dart';
 import 'edu_path_entry_screen.dart';
+import '../../../core/network/http_interceptor.dart';
+import 'login_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserModel user;
@@ -138,16 +139,10 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   }
 
   Future<void> _fetchNetWorth() async {
-    final storage = const FlutterSecureStorage();
-    final token = await storage.read(key: 'jwt');
-    if (token == null) return;
-    final response = await http.get(
+    final response = await HttpInterceptor.get(
       Uri.parse('http://10.0.2.2:8080/api/portfolio/net-worth'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
     );
+    
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       setState(() {

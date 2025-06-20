@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'watchlist_screen.dart';
+import '../../../core/network/http_interceptor.dart';
 
 class StockSearchScreen extends StatefulWidget {
   const StockSearchScreen({Key? key}) : super(key: key);
@@ -48,18 +49,9 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
       _isLoading = true;
     });
 
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-
     try {
-      final response = await http.get(
+      final response = await HttpInterceptor.get(
         Uri.parse('http://10.0.2.2:8080/api/stocks'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
       );
 
       if (response.statusCode == 200) {
@@ -85,18 +77,9 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
   }
 
   Future<void> _addToWatchlist(String symbol) async {
-    final token = await _storage.read(key: 'jwt');
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-
     try {
-      final response = await http.post(
+      final response = await HttpInterceptor.post(
         Uri.parse('http://10.0.2.2:8080/api/watchlist/add/$symbol'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
