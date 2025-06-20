@@ -15,33 +15,53 @@ import 'edu_path_entry_screen.dart';
 import '../data/portfolio_service.dart' as data;
 import '../../../core/network/http_interceptor.dart';
 
-class StockGainsModel {
-  final double value;
-  final List<double> chartData;
+class ProfitLossModel {
+  final double currentProfitLoss;
+  final List<double> profitLossData;
   final List<dynamic> rawSnapshots;
+  static const double initialBalance = 50000.0; // Başlangıç parası
 
-  StockGainsModel({required this.value, required this.chartData, required this.rawSnapshots});
+  ProfitLossModel({
+    required this.currentProfitLoss,
+    required this.profitLossData,
+    required this.rawSnapshots
+  });
 
-  factory StockGainsModel.fromSnapshotJson(List<dynamic> jsonList) {
+  factory ProfitLossModel.fromSnapshotJson(List<dynamic> jsonList) {
     if (jsonList.isEmpty) {
-      return StockGainsModel(value: 0.0, chartData: [], rawSnapshots: []);
+      return ProfitLossModel(
+        currentProfitLoss: 0.0,
+        profitLossData: [],
+        rawSnapshots: []
+      );
     }
-    final chartData = <double>[];
+
+    final profitLossData = <double>[];
     final rawSnapshots = <dynamic>[];
+
     for (final item in jsonList) {
+      double totalValue = 0.0;
+
       if (item is Map<String, dynamic> && item.containsKey('totalValue')) {
-        chartData.add((item['totalValue'] as num?)?.toDouble() ?? 0.0);
-        rawSnapshots.add(item);
+        totalValue = (item['totalValue'] as num?)?.toDouble() ?? 0.0;
       } else if (item is Map && item.containsKey('totalValue')) {
-        chartData.add((item['totalValue'] as num?)?.toDouble() ?? 0.0);
-        rawSnapshots.add(item);
+        totalValue = (item['totalValue'] as num?)?.toDouble() ?? 0.0;
       } else if (item is Map && item.containsKey('value')) {
-        chartData.add((item['value'] as num?)?.toDouble() ?? 0.0);
-        rawSnapshots.add(item);
+        totalValue = (item['value'] as num?)?.toDouble() ?? 0.0;
       }
+
+      // Kar/zarar hesaplama: toplam değer - başlangıç parası
+      final profitLoss = totalValue - initialBalance;
+      profitLossData.add(profitLoss);
+      rawSnapshots.add(item);
     }
-    final value = chartData.isNotEmpty ? chartData.last : 0.0;
-    return StockGainsModel(value: value, chartData: chartData, rawSnapshots: rawSnapshots);
+
+    final currentProfitLoss = profitLossData.isNotEmpty ? profitLossData.last : 0.0;
+    return ProfitLossModel(
+      currentProfitLoss: currentProfitLoss,
+      profitLossData: profitLossData,
+      rawSnapshots: rawSnapshots
+    );
   }
 }
 
@@ -56,7 +76,7 @@ class HomeService {
     final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl$_watchlistEndpoint'),
     );
-    
+
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => WatchlistItemModel.fromJson(e)).toList();
@@ -65,22 +85,30 @@ class HomeService {
     }
   }
 
-  Future<StockGainsModel> fetchStockGains() async {
+  Future<ProfitLossModel> fetchProfitLoss() async {
     try {
       final response = await HttpInterceptor.get(
         Uri.parse('$_baseUrl$_portfolioSnapshotsEndpoint'),
       );
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is List) {
-          return StockGainsModel.fromSnapshotJson(data);
+          return ProfitLossModel.fromSnapshotJson(data);
         }
       }
       // API'den beklenmeyen cevap gelirse boş veri döndür
-      return StockGainsModel(value: 0.0, chartData: [], rawSnapshots: []);
+      return ProfitLossModel(
+        currentProfitLoss: 0.0,
+        profitLossData: [],
+        rawSnapshots: []
+      );
     } catch (e) {
-      return StockGainsModel(value: 0.0, chartData: [], rawSnapshots: []);
+      return ProfitLossModel(
+        currentProfitLoss: 0.0,
+        profitLossData: [],
+        rawSnapshots: []
+      );
     }
   }
 
@@ -89,7 +117,7 @@ class HomeService {
       final response = await HttpInterceptor.get(
         Uri.parse('$_baseUrl/api/users/me'),
       );
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['fullName'] ?? 'John Doe';
@@ -106,7 +134,7 @@ class HomeService {
       final response = await HttpInterceptor.get(
         Uri.parse('$_baseUrl$_portfolioEndpoint'),
       );
-      
+
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data.map((e) => PortfolioItemModel.fromJson(e)).toList();
@@ -158,7 +186,7 @@ class HomeService {
     final response = await HttpInterceptor.get(
       Uri.parse('$_baseUrl/api/intraday/$symbol'),
     );
-    
+
     try {
       final data = jsonDecode(response.body);
       if (data is List) {
@@ -208,11 +236,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<WatchlistItemModel>> _watchlistFuture;
-  late Future<StockGainsModel> _stockGainsFuture;
+  late Future<ProfitLossModel> _profitLossFuture;
   late Future<String> _userNameFuture;
   late Future<List<PortfolioItemModel>> _portfolioFuture;
   int _selectedIndex = 0;
-  String _selectedTimeframe = 'This week';
+  String _selectedProfitLossTimeframe = 'This week';
   static const List<String> _timeframes = ['This week', 'This month', 'All'];
   Map<String, double> _buyPrices = {};
 
@@ -225,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _refreshData() {
     setState(() {
       _watchlistFuture = HomeService().fetchWatchlistWithSparklines();
-      _stockGainsFuture = HomeService().fetchStockGains();
+      _profitLossFuture = HomeService().fetchProfitLoss();
       _userNameFuture = HomeService().fetchUserName();
       _portfolioFuture = HomeService().fetchPortfolio();
     });
@@ -243,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<double> _filterChartData(List<double> chartData, List<dynamic> rawSnapshots) {
-    if (_selectedTimeframe == 'All' || chartData.isEmpty) return chartData;
+    if (_selectedProfitLossTimeframe == 'All' || chartData.isEmpty) return chartData;
     final now = DateTime.now();
     List<DateTime> dates = [];
     for (final item in rawSnapshots) {
@@ -257,10 +285,10 @@ class _HomeScreenState extends State<HomeScreen> {
         dates.add(now);
       }
     }
-    if (_selectedTimeframe == 'This week') {
+    if (_selectedProfitLossTimeframe == 'This week') {
       final weekAgo = now.subtract(const Duration(days: 7));
       return [for (int i = 0; i < chartData.length; i++) if (dates[i].isAfter(weekAgo)) chartData[i]];
-    } else if (_selectedTimeframe == 'This month') {
+    } else if (_selectedProfitLossTimeframe == 'This month') {
       final monthAgo = DateTime(now.year, now.month - 1, now.day);
       return [for (int i = 0; i < chartData.length; i++) if (dates[i].isAfter(monthAgo)) chartData[i]];
     }
@@ -269,11 +297,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onItemTapped(int index) {
     if (index == _selectedIndex) return;
-    
+
     setState(() {
       _selectedIndex = index;
     });
-    
+
     if (index == 1) {
       Navigator.push(
         context,
@@ -372,20 +400,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   }
                 ),
-                
+
                 const SizedBox(height: 24),
-                
-                // Stock Gains Card
-                FutureBuilder<StockGainsModel>(
-                  future: _stockGainsFuture,
+
+                // Profit/Loss Card
+                FutureBuilder<ProfitLossModel>(
+                  future: _profitLossFuture,
                   builder: (context, snapshot) {
-                    final stockGains = snapshot.data;
-                    final rawSnapshots = snapshot.hasData && snapshot.data != null && snapshot.data!.chartData.isNotEmpty && snapshot.data is dynamic && snapshot.data is StockGainsModel && snapshot.data is! List<double> && snapshot.data is! List<int>
-                        ? (snapshot.data as dynamic).rawSnapshots ?? []
-                        : [];
-                    final filteredChartData = (snapshot.hasData && rawSnapshots.isNotEmpty)
-                        ? _filterChartData(stockGains!.chartData, rawSnapshots)
-                        : stockGains?.chartData ?? [];
+                    final profitLoss = snapshot.data;
+                    final rawSnapshots = snapshot.hasData && snapshot.data != null && snapshot.data!.profitLossData.isNotEmpty
+                        ? snapshot.data!.rawSnapshots
+                        : <dynamic>[];
+                    var filteredProfitLossData = (snapshot.hasData && rawSnapshots.isNotEmpty)
+                        ? _filterChartData(profitLoss!.profitLossData, rawSnapshots)
+                        : profitLoss?.profitLossData ?? <double>[];
+
+                    if (filteredProfitLossData.isEmpty && profitLoss != null && profitLoss.profitLossData.isNotEmpty) {
+                      filteredProfitLossData = [profitLoss.profitLossData.last];
+                    }
+
+                    final isPositive = (profitLoss?.currentProfitLoss ?? 0.0) >= 0;
+                    final profitLossColor = isPositive ? Colors.green : Colors.red;
+
                     return Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -403,35 +439,58 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Stock Gains',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
+                          Row(
+                            children: [
+                              Icon(
+                                isPositive ? Icons.trending_up : Icons.trending_down,
+                                color: profitLossColor,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Profit/Loss',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 10),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                '\$${stockGains?.value.toStringAsFixed(2) ?? '0.00'}',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${isPositive ? '+' : ''}\$${profitLoss?.currentProfitLoss.toStringAsFixed(2) ?? '0.00'}',
+                                    style: TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                      color: profitLossColor,
+                                    ),
+                                  ),
+                                  Text(
+                                    'From \$50,000',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
                               ),
                               Container(
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Color(0xFF2A3FFF), width: 1.2),
+                                  border: Border.all(color: profitLossColor, width: 1.2),
                                 ),
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 constraints: const BoxConstraints(minHeight: 28),
                                 child: DropdownButton<String>(
-                                  value: _selectedTimeframe,
+                                  value: _selectedProfitLossTimeframe,
                                   items: _timeframes.map((String value) {
                                     return DropdownMenuItem<String>(
                                       value: value,
@@ -441,14 +500,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onChanged: (String? newValue) {
                                     if (newValue != null) {
                                       setState(() {
-                                        _selectedTimeframe = newValue;
+                                        _selectedProfitLossTimeframe = newValue;
                                       });
                                     }
                                   },
                                   underline: const SizedBox(),
                                   icon: const Icon(Icons.keyboard_arrow_down, size: 18),
                                   style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w500, fontSize: 14),
-                                  dropdownColor: Color(0xFF2A3FFF),
+                                  dropdownColor: profitLossColor,
                                   borderRadius: BorderRadius.circular(20),
                                   selectedItemBuilder: (BuildContext context) {
                                     return _timeframes.map((String value) {
@@ -472,13 +531,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 20),
                           SizedBox(
                             height: 150,
-                            child: stockGains != null
+                            child: profitLoss != null
                                 ? CustomPaint(
                                     size: const Size(double.infinity, 150),
                                     painter: ChartPainter(
-                                      data: filteredChartData,
-                                      lineColor: primaryColor,
-                                      fillColor: primaryColor.withOpacity(0.2),
+                                      data: filteredProfitLossData,
+                                      lineColor: profitLossColor,
+                                      fillColor: profitLossColor.withOpacity(0.2),
+                                      showBaseline: true,
                                     ),
                                   )
                                 : const Center(child: CircularProgressIndicator()),
@@ -488,9 +548,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Portfolio Section
                 Container(
                   margin: const EdgeInsets.symmetric(vertical: 8),
@@ -1056,11 +1116,13 @@ class ChartPainter extends CustomPainter {
   final List<double> data;
   final Color lineColor;
   final Color fillColor;
+  final bool showBaseline;
 
   ChartPainter({
     required this.data,
     required this.lineColor,
     required this.fillColor,
+    this.showBaseline = false,
   });
 
   @override
@@ -1077,30 +1139,90 @@ class ChartPainter extends CustomPainter {
 
     if (data.isEmpty) return;
 
+    if (data.length < 2) {
+      // Sadece tek bir veri noktası varsa düz bir çizgi çiz.
+      double value = data.first;
+      double rangeMin = showBaseline ? (value < 0 ? value * 1.2 : 0) : value * 0.8;
+      double rangeMax = showBaseline ? (value > 0 ? value * 1.2 : 0) : value * 1.2;
+
+      // Değer 0 ise, aralığı sıfır etrafında ayarla
+      if (value == 0 && showBaseline) {
+        rangeMin = -1;
+        rangeMax = 1;
+      } else if (rangeMax - rangeMin == 0) {
+        rangeMax += 1; // 0 bölünmesini engelle
+      }
+
+      final double range = rangeMax - rangeMin;
+      final double y = size.height - ((value - rangeMin) / range) * size.height;
+      
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      
+      // Sıfır çizgisini çiz
+      if (showBaseline) {
+        final baselinePaint = Paint()
+          ..color = Colors.grey.withOpacity(0.3)
+          ..strokeWidth = 1
+          ..style = PaintingStyle.stroke;
+        final baselineY = size.height - ((0 - rangeMin) / range) * size.height;
+        canvas.drawLine(Offset(0, baselineY), Offset(size.width, baselineY), baselinePaint);
+      }
+      return;
+    }
+
     final double xStep = size.width / (data.length - 1);
     final double maxValue = data.reduce((curr, next) => curr > next ? curr : next);
     final double minValue = data.reduce((curr, next) => curr < next ? curr : next);
-    final double range = maxValue - minValue;
+    
+    // Kar/zarar grafiği için sıfır çizgisini dahil et
+    double adjustedMinValue = minValue;
+    double adjustedMaxValue = maxValue;
+    
+    if (showBaseline) {
+      adjustedMinValue = minValue < 0 ? minValue : 0;
+      adjustedMaxValue = maxValue > 0 ? maxValue : 0;
+    }
+    
+    final double range = adjustedMaxValue - adjustedMinValue;
+    if (range == 0) return;
 
     final path = Path();
     final fillPath = Path();
 
     // Başlangıç noktası
-    path.moveTo(0, size.height - ((data[0] - minValue) / range) * size.height);
-    fillPath.moveTo(0, size.height);
-    fillPath.lineTo(0, size.height - ((data[0] - minValue) / range) * size.height);
+    final startY = size.height - ((data[0] - adjustedMinValue) / range) * size.height;
+    path.moveTo(0, startY);
+    
+    final baselineYForFill = size.height - ((0 - adjustedMinValue) / range) * size.height;
+    fillPath.moveTo(0, baselineYForFill);
+    fillPath.lineTo(0, startY);
 
     // Diğer noktalar
     for (int i = 1; i < data.length; i++) {
       final double x = i * xStep;
-      final double y = size.height - ((data[i] - minValue) / range) * size.height;
+      final double y = size.height - ((data[i] - adjustedMinValue) / range) * size.height;
       path.lineTo(x, y);
       fillPath.lineTo(x, y);
     }
 
     // Dolgu için son noktalar
-    fillPath.lineTo(size.width, size.height);
+    fillPath.lineTo(size.width, baselineYForFill);
     fillPath.close();
+
+    // Sıfır çizgisini çiz (kar/zarar grafiği için)
+    if (showBaseline) {
+      final baselinePaint = Paint()
+        ..color = Colors.grey.withOpacity(0.3)
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
+      
+      final baselineY = size.height - ((0 - adjustedMinValue) / range) * size.height;
+      canvas.drawLine(
+        Offset(0, baselineY),
+        Offset(size.width, baselineY),
+        baselinePaint,
+      );
+    }
 
     // Çizim
     canvas.drawPath(fillPath, fillPaint);
@@ -1120,7 +1242,7 @@ class ChartPainter extends CustomPainter {
     final highlightIndex = data.length - 5;
     if (highlightIndex >= 0) {
       final x = highlightIndex * xStep;
-      final y = size.height - ((data[highlightIndex] - minValue) / range) * size.height;
+      final y = size.height - ((data[highlightIndex] - adjustedMinValue) / range) * size.height;
       
       canvas.drawCircle(Offset(x, y), 6, dotFillPaint);
       canvas.drawCircle(Offset(x, y), 6, dotPaint);

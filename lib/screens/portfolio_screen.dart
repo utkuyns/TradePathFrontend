@@ -6,6 +6,7 @@ import '../features/auth/presentation/homepage.dart';
 import '../features/auth/presentation/profile_screen.dart';
 import '../features/auth/presentation/trade_screen.dart';
 import '../features/auth/data/auth_service.dart';
+import '../features/auth/presentation/edu_path_entry_screen.dart';
 
 class PortfolioItemModel {
   final String symbol;
@@ -127,6 +128,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           );
         }
       });
+    } else if (index == 3) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const EduPathEntryScreen()),
+      );
     }
   }
 

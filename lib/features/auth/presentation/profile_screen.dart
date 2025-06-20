@@ -67,6 +67,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
         return "Portfolio Builder";
       case 'EDUCATION_MASTER':
         return "Education Master";
+      case 'FIRST_PATH_DONE':
+        return "Path Explorer";
       default:
         return code;
     }
@@ -82,6 +84,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
         return "Added 3 different stocks to your portfolio";
       case 'EDUCATION_MASTER':
         return "Completed all educational modules";
+      case 'FIRST_PATH_DONE':
+        return "You have completed your first learning path! Keep going to unlock more achievements.";
       default:
         return "";
     }
@@ -152,7 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   }
 
   void _onItemTapped(int index) async {
-    if (index == _selectedIndex) return;
+    if (index == _selectedIndex && index != 3) return;
     
     if (index == 0) {
       // Home sayfasına yönlendirme
@@ -280,6 +284,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                 bgColor = Color(0xFF4CAF50).withOpacity(0.12);
                 iconGradient = LinearGradient(colors: [Color(0xFF4CAF50), Color(0xFF81C784)]);
                 break;
+              case 'FIRST_PATH_DONE':
+                iconData = Icons.school;
+                bgColor = Color(0xFFFFE0B2).withOpacity(0.7);
+                iconGradient = LinearGradient(colors: [Color(0xFFFF9800), Color(0xFFFFEB3B)]);
+                break;
               default:
                 iconData = Icons.star_border_rounded;
                 bgColor = Color(0xFFB0BEC5).withOpacity(0.12);
@@ -315,6 +324,10 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                           case 'EDUCATION_MASTER':
                             iconData = Icons.school;
                             iconColor = Color(0xFF4CAF50);
+                            break;
+                          case 'FIRST_PATH_DONE':
+                            iconData = Icons.school;
+                            iconColor = Color(0xFFFF9800);
                             break;
                           default:
                             iconData = Icons.star_border_rounded;

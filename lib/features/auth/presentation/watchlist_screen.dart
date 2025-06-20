@@ -75,9 +75,11 @@ class WatchlistScreen extends StatefulWidget {
 }
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
-  late Future<List<WatchlistItemModel>> _watchlistFuture;
+  bool _isLoading = true;
+  List<WatchlistItemModel> _watchlistItems = [];
   int _selectedIndex = 0;
   final WatchlistService _watchlistService = WatchlistService();
+  bool _isEditMode = false;
 
   @override
   void initState() {
@@ -86,8 +88,53 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 
   void _refreshWatchlist() {
+    HomeService().fetchWatchlistWithSparklines().then((items) {
+      if (!mounted) return;
+      setState(() {
+        _watchlistItems = items;
+        _isLoading = false;
+      });
+    }).catchError((e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load watchlist: $e')),
+      );
+    });
+  }
+
+  void _toggleEditMode() {
     setState(() {
-      _watchlistFuture = HomeService().fetchWatchlistWithSparklines();
+      _isEditMode = !_isEditMode;
+    });
+  }
+
+  void _reorderItems(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final item = _watchlistItems.removeAt(oldIndex);
+      _watchlistItems.insert(newIndex, item);
+    });
+    // TODO: Implement API call to save the new order
+  }
+
+  void _removeItem(int index) {
+    final item = _watchlistItems[index];
+    _watchlistService.removeFromWatchlist(item.symbol).then((_) {
+      setState(() {
+        _watchlistItems.removeAt(index);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${item.symbol} removed from watchlist')),
+      );
+    }).catchError((error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove ${item.symbol}')),
+      );
     });
   }
 
@@ -138,7 +185,12 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const StockSearchScreen()),
-    ).then((_) => _refreshWatchlist());
+    ).then((_) {
+      setState(() {
+        _isLoading = true;
+      });
+      _refreshWatchlist();
+    });
   }
 
   void _showRecommendationDialog(String symbol) async {
@@ -591,189 +643,206 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
         foregroundColor: textColor,
         elevation: 0,
         actions: [
+          if (_watchlistItems.isNotEmpty)
+            IconButton(
+              icon: Icon(_isEditMode ? Icons.check : Icons.edit),
+              onPressed: _toggleEditMode,
+            ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _navigateToStockSearch,
           ),
         ],
       ),
-      body: FutureBuilder<List<WatchlistItemModel>>(
-        future: _watchlistFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Failed to load watchlist', 
-                style: TextStyle(color: Colors.red, fontSize: 18, fontWeight: FontWeight.bold)
-              )
-            );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.star_border_rounded, size: 80, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No stocks in your watchlist yet',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _navigateToStockSearch,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Add Stocks', style: TextStyle(fontSize: 16)),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final items = snapshot.data!;
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ListView.separated(
-              itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final isPositive = item.priceChange >= 0;
-                
-                return Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [cardGradientStart, cardGradientEnd],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _watchlistItems.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.star_border_rounded, size: 80, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No stocks in your watchlist yet',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _navigateToStockSearch,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Add Stocks', style: TextStyle(fontSize: 16, color: Colors.white)),
                       ),
                     ],
                   ),
-                  child: Dismissible(
-                    key: Key(item.symbol),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    onDismissed: (direction) {
-                      _watchlistService.removeFromWatchlist(item.symbol).then((_) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('${item.symbol} removed from watchlist')),
-                        );
-                        _refreshWatchlist();
-                      });
-                    },
-                    child: GestureDetector(
-                      onLongPress: () => _showRecommendationDialog(item.symbol),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ReorderableListView.builder(
+                    itemCount: _watchlistItems.length,
+                    onReorder: _reorderItems,
+                    buildDefaultDragHandles: false,
+                    itemBuilder: (context, index) {
+                      final item = _watchlistItems[index];
+                      final isPositive = item.priceChange >= 0;
+                      return Container(
+                        key: Key(item.symbol),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Stack(
+                          alignment: Alignment.centerRight,
                           children: [
-                            // Logo/Avatar
-                            CircleAvatar(
-                              backgroundColor: primaryColor.withOpacity(0.15),
-                              child: Text(
-                                item.symbol.isNotEmpty ? item.symbol[0] : '?',
-                                style: TextStyle(
-                                  color: primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                              radius: 24,
-                            ),
-                            const SizedBox(width: 16),
-                            // Symbol ve şirket adı
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.symbol,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: textColor,
-                                      fontSize: 18,
+                            // Silme butonu (arka plan)
+                            if (_isEditMode)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 60,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.only(
+                                      topRight: Radius.circular(16),
+                                      bottomRight: Radius.circular(16),
                                     ),
                                   ),
-                                  Text(
-                                    item.companyName,
-                                    style: TextStyle(
-                                      color: textColor.withOpacity(0.7),
-                                      fontSize: 14,
-                                    ),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.white),
+                                    onPressed: () => _removeItem(index),
                                   ),
-                                ],
-                              ),
-                            ),
-                            // Fiyat grafiği (gerçek sparkline olarak)
-                            Container(
-                              width: 80,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: CustomPaint(
-                                painter: MiniChartPainter(
-                                  data: item.sparkline,
-                                  color: isPositive ? Colors.green : Colors.red,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            // Fiyat ve değişim
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
+
+                            // Kart içeriği
+                            Row(
                               children: [
-                                Text(
-                                  '\$${item.currentPrice.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: textColor,
-                                    fontSize: 18,
+                                if (_isEditMode)
+                                  ReorderableDragStartListener(
+                                    index: index,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      child: Icon(Icons.drag_handle, color: primaryColor, size: 24),
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${isPositive ? '+' : ''}${item.priceChangePercentage.toStringAsFixed(2)}%',
-                                  style: TextStyle(
-                                    color: isPositive ? Colors.green : Colors.red,
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 14,
+                                Expanded(
+                                  child: AnimatedPadding(
+                                    duration: const Duration(milliseconds: 250),
+                                    padding: EdgeInsets.only(right: _isEditMode ? 60 : 0),
+                                    child: GestureDetector(
+                                      onLongPress: () => _showRecommendationDialog(item.symbol),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [cardGradientStart, cardGradientEnd],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.04),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                                          child: Row(
+                                            children: [
+                                              // Logo/Avatar
+                                              CircleAvatar(
+                                                backgroundColor: primaryColor.withOpacity(0.15),
+                                                child: Text(
+                                                  item.symbol.isNotEmpty ? item.symbol[0] : '?',
+                                                  style: TextStyle(
+                                                    color: primaryColor,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 18,
+                                                  ),
+                                                ),
+                                                radius: 22,
+                                              ),
+                                              const SizedBox(width: 14),
+                                              // Symbol ve şirket adı
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      item.symbol,
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: textColor,
+                                                        fontSize: 17,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      item.companyName,
+                                                      style: TextStyle(
+                                                        color: textColor.withOpacity(0.7),
+                                                        fontSize: 13,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      maxLines: 1,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              // Fiyat grafiği
+                                              Container(
+                                                width: 60,
+                                                height: 24,
+                                                child: CustomPaint(
+                                                  painter: MiniChartPainter(
+                                                    data: item.sparkline,
+                                                    color: isPositive ? Colors.green : Colors.red,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              // Fiyat ve değişim
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                children: [
+                                                  Text(
+                                                    '\$${item.currentPrice.toStringAsFixed(2)}',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: textColor,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    '${isPositive ? '+' : ''}${item.priceChangePercentage.toStringAsFixed(2)}%',
+                                                    style: TextStyle(
+                                                      color: isPositive ? Colors.green : Colors.red,
+                                                      fontWeight: FontWeight.w500,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ],
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
-          );
-        },
-      ),
+                ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,

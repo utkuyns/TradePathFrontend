@@ -28,6 +28,8 @@ String getTranslatedBadgeTitle(String code) {
       return "Portfolio Builder";
     case 'EDUCATION_MASTER':
       return "Education Master";
+    case 'FIRST_PATH_DONE':
+      return "Path Explorer";
     default:
       return code;
   }
@@ -43,6 +45,8 @@ String getTranslatedBadgeDescription(String code) {
       return "Added 3 different stocks to your portfolio";
     case 'EDUCATION_MASTER':
       return "Completed all educational modules";
+    case 'FIRST_PATH_DONE':
+      return "You have completed your first learning path! Keep going to unlock more achievements.";
     default:
       return "";
   }
