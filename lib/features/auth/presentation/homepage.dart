@@ -14,6 +14,7 @@ import '../data/auth_service.dart';
 import 'edu_path_entry_screen.dart';
 import '../data/portfolio_service.dart' as data;
 import '../../../core/network/http_interceptor.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class ProfitLossModel {
   final double currentProfitLoss;
@@ -28,7 +29,9 @@ class ProfitLossModel {
   });
 
   factory ProfitLossModel.fromSnapshotJson(List<dynamic> jsonList) {
+    print('🔄 Processing ${jsonList.length} snapshots'); // Debug log
     if (jsonList.isEmpty) {
+      print('📭 No snapshots found'); // Debug log
       return ProfitLossModel(
         currentProfitLoss: 0.0,
         profitLossData: [],
@@ -39,7 +42,8 @@ class ProfitLossModel {
     final profitLossData = <double>[];
     final rawSnapshots = <dynamic>[];
 
-    for (final item in jsonList) {
+    for (int i = 0; i < jsonList.length; i++) {
+      final item = jsonList[i];
       double totalValue = 0.0;
 
       if (item is Map<String, dynamic> && item.containsKey('totalValue')) {
@@ -50,6 +54,8 @@ class ProfitLossModel {
         totalValue = (item['value'] as num?)?.toDouble() ?? 0.0;
       }
 
+      print('📈 Snapshot $i: totalValue=$totalValue'); // Debug log
+
       // Kar/zarar hesaplama: toplam değer - başlangıç parası
       final profitLoss = totalValue - initialBalance;
       profitLossData.add(profitLoss);
@@ -57,6 +63,7 @@ class ProfitLossModel {
     }
 
     final currentProfitLoss = profitLossData.isNotEmpty ? profitLossData.last : 0.0;
+    print('✅ Final profit/loss data: $profitLossData'); // Debug log
     return ProfitLossModel(
       currentProfitLoss: currentProfitLoss,
       profitLossData: profitLossData,
@@ -93,10 +100,15 @@ class HomeService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('🔍 API Response: $data'); // Debug log
         if (data is List) {
-          return ProfitLossModel.fromSnapshotJson(data);
+          final result = ProfitLossModel.fromSnapshotJson(data);
+          print('📊 Processed Data: ${result.profitLossData}'); // Debug log
+          print('💰 Current Profit/Loss: ${result.currentProfitLoss}'); // Debug log
+          return result;
         }
       }
+      print('⚠️ API returned status: ${response.statusCode}'); // Debug log
       // API'den beklenmeyen cevap gelirse boş veri döndür
       return ProfitLossModel(
         currentProfitLoss: 0.0,
@@ -104,6 +116,7 @@ class HomeService {
         rawSnapshots: []
       );
     } catch (e) {
+      print('❌ Error fetching profit/loss: $e'); // Debug log
       return ProfitLossModel(
         currentProfitLoss: 0.0,
         profitLossData: [],
@@ -284,6 +297,148 @@ class _HomeScreenState extends State<HomeScreen> {
     return chartData;
   }
 
+  /// Builds a professional profit/loss chart using fl_chart library
+  /// Shows the portfolio performance over time based on snapshot data
+  /// Displays sample data when no real data is available
+  Widget _buildProfitLossChart(List<double> data, Color color) {
+    if (data.isEmpty) {
+      // Show sample data for demonstration
+      final sampleData = [0.0, 500.0, 1200.0, 800.0, 1500.0, 2000.0, 1800.0];
+      return _buildChartWithData(sampleData, color, isSample: true);
+    }
+
+    return _buildChartWithData(data, color, isSample: false);
+  }
+
+  /// Creates the actual chart widget with the given data
+  /// Includes interactive features, grid lines, and baseline for profit/loss visualization
+  Widget _buildChartWithData(List<double> data, Color color, {required bool isSample}) {
+    // Create spots for the chart
+    final spots = data.asMap().entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), entry.value);
+    }).toList();
+
+    // Calculate min and max values for better scaling
+    final minValue = data.reduce((a, b) => a < b ? a : b);
+    final maxValue = data.reduce((a, b) => a > b ? a : b);
+    final range = maxValue - minValue;
+    final padding = range * 0.1; // 10% padding
+
+    return Stack(
+      children: [
+        LineChart(
+          LineChartData(
+            lineTouchData: LineTouchData(
+              enabled: true,
+            ),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              horizontalInterval: range > 0 ? range / 4 : 1000,
+              getDrawingHorizontalLine: (value) {
+                return FlLine(
+                  color: Colors.grey.withOpacity(0.2),
+                  strokeWidth: 1,
+                );
+              },
+            ),
+            titlesData: FlTitlesData(
+              show: true,
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              topTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+            ),
+            borderData: FlBorderData(
+              show: false,
+            ),
+            minX: 0,
+            maxX: (data.length - 1).toDouble(),
+            minY: minValue - padding,
+            maxY: maxValue + padding,
+            extraLinesData: ExtraLinesData(
+              horizontalLines: [
+                HorizontalLine(
+                  y: 0,
+                  color: Colors.grey.withOpacity(0.5),
+                  strokeWidth: 1,
+                  dashArray: [5, 5],
+                ),
+              ],
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                isCurved: true,
+                color: color,
+                barWidth: 3,
+                isStrokeCapRound: true,
+                dotData: FlDotData(
+                  show: true,
+                  getDotPainter: (spot, percent, barData, index) {
+                    // Show dots only for the last few points
+                    if (index >= spots.length - 3) {
+                      return FlDotCirclePainter(
+                        radius: 4,
+                        color: Colors.white,
+                        strokeWidth: 2,
+                        strokeColor: color,
+                      );
+                    }
+                    return FlDotCirclePainter(
+                      radius: 0,
+                      color: Colors.transparent,
+                    );
+                  },
+                ),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: color.withOpacity(0.15),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      color.withOpacity(0.3),
+                      color.withOpacity(0.05),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (isSample)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Sample Data',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   void _onItemTapped(int index) {
     if (index == _selectedIndex) return;
 
@@ -331,529 +486,537 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: secondaryColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Kullanıcı karşılama
-                FutureBuilder<String>(
-                  future: _userNameFuture,
-                  builder: (context, snapshot) {
-                    final userName = snapshot.data ?? 'John Doe';
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Hi $userName',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: textColor.withOpacity(0.7),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Welcome to TradePath',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Stack(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.notifications_outlined, size: 28),
-                              onPressed: () {},
-                            ),
-                            Positioned(
-                              right: 12,
-                              top: 8,
-                              child: Container(
-                                width: 10,
-                                height: 10,
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            _refreshData();
+          },
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Kullanıcı karşılama
+                  FutureBuilder<String>(
+                    future: _userNameFuture,
+                    builder: (context, snapshot) {
+                      final userName = snapshot.data ?? 'John Doe';
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Hi $userName',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: textColor.withOpacity(0.7),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
-                  }
-                ),
-
-                const SizedBox(height: 24),
-
-                // Profit/Loss Card
-                FutureBuilder<ProfitLossModel>(
-                  future: _profitLossFuture,
-                  builder: (context, snapshot) {
-                    final profitLoss = snapshot.data;
-                    final rawSnapshots = snapshot.hasData && snapshot.data != null && snapshot.data!.profitLossData.isNotEmpty
-                        ? snapshot.data!.rawSnapshots
-                        : <dynamic>[];
-                    var filteredProfitLossData = (snapshot.hasData && rawSnapshots.isNotEmpty)
-                        ? _filterChartData(profitLoss!.profitLossData, rawSnapshots)
-                        : profitLoss?.profitLossData ?? <double>[];
-
-                    if (filteredProfitLossData.isEmpty && profitLoss != null && profitLoss.profitLossData.isNotEmpty) {
-                      filteredProfitLossData = [profitLoss.profitLossData.last];
-                    }
-
-                    final isPositive = (profitLoss?.currentProfitLoss ?? 0.0) >= 0;
-                    final profitLossColor = isPositive ? Colors.green : Colors.red;
-
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                isPositive ? Icons.trending_up : Icons.trending_down,
-                                color: profitLossColor,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
+                              const SizedBox(height: 4),
                               const Text(
-                                'Profit/Loss',
+                                'Welcome to TradePath',
                                 style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          Stack(
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${isPositive ? '+' : ''}\$${profitLoss?.currentProfitLoss.toStringAsFixed(2) ?? '0.00'}',
-                                    style: TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      color: profitLossColor,
-                                    ),
+                              IconButton(
+                                icon: const Icon(Icons.notifications_outlined, size: 28),
+                                onPressed: () {},
+                              ),
+                              Positioned(
+                                right: 12,
+                                top: 8,
+                                child: Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
                                   ),
-                                  Text(
-                                    'From \$50,000',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Profit/Loss Card
+                  FutureBuilder<ProfitLossModel>(
+                    future: _profitLossFuture,
+                    builder: (context, snapshot) {
+                      final profitLoss = snapshot.data;
+                      final rawSnapshots = snapshot.hasData && snapshot.data != null && snapshot.data!.profitLossData.isNotEmpty
+                          ? snapshot.data!.rawSnapshots
+                          : <dynamic>[];
+                      var filteredProfitLossData = (snapshot.hasData && rawSnapshots.isNotEmpty)
+                          ? _filterChartData(profitLoss!.profitLossData, rawSnapshots)
+                          : profitLoss?.profitLossData ?? <double>[];
+
+                      if (filteredProfitLossData.isEmpty && profitLoss != null && profitLoss.profitLossData.isNotEmpty) {
+                        filteredProfitLossData = [profitLoss.profitLossData.last];
+                      }
+
+                      final isPositive = (profitLoss?.currentProfitLoss ?? 0.0) >= 0;
+                      final profitLossColor = isPositive ? Colors.green : Colors.red;
+
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  isPositive ? Icons.trending_up : Icons.trending_down,
+                                  color: profitLossColor,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Profit/Loss',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const Spacer(),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.refresh,
+                                    color: profitLossColor,
+                                    size: 20,
+                                  ),
+                                  onPressed: () {
+                                    _refreshData();
+                                  },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${isPositive ? '+' : ''}\$${profitLoss?.currentProfitLoss.toStringAsFixed(2) ?? '0.00'}',
+                                      style: TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                        color: profitLossColor,
+                                      ),
                                     ),
+                                    Text(
+                                      'From \$50,000',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: profitLossColor, width: 1.2),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  constraints: const BoxConstraints(minHeight: 28),
+                                  child: DropdownButton<String>(
+                                    value: _selectedProfitLossTimeframe,
+                                    items: _timeframes.map((String value) {
+                                      return DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white)),
+                                      );
+                                    }).toList(),
+                                    onChanged: (String? newValue) {
+                                      if (newValue != null) {
+                                        setState(() {
+                                          _selectedProfitLossTimeframe = newValue;
+                                        });
+                                      }
+                                    },
+                                    underline: const SizedBox(),
+                                    icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w500, fontSize: 14),
+                                    dropdownColor: profitLossColor,
+                                    borderRadius: BorderRadius.circular(20),
+                                    selectedItemBuilder: (BuildContext context) {
+                                      return _timeframes.map((String value) {
+                                        return Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            value,
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.w500,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList();
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              height: 150,
+                              child: profitLoss != null && filteredProfitLossData.isNotEmpty
+                                  ? _buildProfitLossChart(filteredProfitLossData, profitLossColor)
+                                  : const Center(child: CircularProgressIndicator()),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Portfolio Section
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.dashboard, color: primaryColor, size: 24),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Portfolio',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
                               ),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: profitLossColor, width: 1.2),
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                constraints: const BoxConstraints(minHeight: 28),
-                                child: DropdownButton<String>(
-                                  value: _selectedProfitLossTimeframe,
-                                  items: _timeframes.map((String value) {
-                                    return DropdownMenuItem<String>(
-                                      value: value,
-                                      child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white)),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const PortfolioScreen()),
                                     );
-                                  }).toList(),
-                                  onChanged: (String? newValue) {
-                                    if (newValue != null) {
-                                      setState(() {
-                                        _selectedProfitLossTimeframe = newValue;
-                                      });
-                                    }
                                   },
-                                  underline: const SizedBox(),
-                                  icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-                                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w500, fontSize: 14),
-                                  dropdownColor: profitLossColor,
-                                  borderRadius: BorderRadius.circular(20),
-                                  selectedItemBuilder: (BuildContext context) {
-                                    return _timeframes.map((String value) {
-                                      return Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          value,
-                                          style: const TextStyle(
-                                            color: Colors.black,
-                                            fontWeight: FontWeight.w500,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'View all',
+                                          style: TextStyle(
+                                            color: primaryColor,
+                                            fontWeight: FontWeight.w600,
                                             fontSize: 14,
                                           ),
                                         ),
-                                      );
-                                    }).toList();
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            height: 150,
-                            child: profitLoss != null
-                                ? CustomPaint(
-                                    size: const Size(double.infinity, 150),
-                                    painter: ChartPainter(
-                                      data: filteredProfitLossData,
-                                      lineColor: profitLossColor,
-                                      fillColor: profitLossColor.withOpacity(0.2),
-                                      showBaseline: true,
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.arrow_forward_ios,
+                                          size: 14,
+                                          color: primaryColor,
+                                        ),
+                                      ],
                                     ),
-                                  )
-                                : const Center(child: CircularProgressIndicator()),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 24),
-
-                // Portfolio Section
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.dashboard, color: primaryColor, size: 24),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Portfolio',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (context) => const PortfolioScreen()),
-                                  );
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'View all',
-                                        style: TextStyle(
-                                          color: primaryColor,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.arrow_forward_ios,
-                                        size: 14,
-                                        color: primaryColor,
-                                      ),
-                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Portfolio items...
-                      FutureBuilder<List<PortfolioItemModel>>(
-                        future: _portfolioFuture,
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const SizedBox(
-                              height: 150,
-                              child: Center(child: CircularProgressIndicator()),
-                            );
-                          } else if (snapshot.hasError) {
-                            return const SizedBox(
-                              height: 100,
-                              child: Center(
-                                child: Text(
-                                  'Failed to load portfolio',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            );
-                          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return const SizedBox(
-                              height: 100,
-                              child: Center(
-                                child: Text(
-                                  'No stocks in your portfolio',
-                                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                                ),
-                              ),
-                            );
-                          }
-
-                          final items = snapshot.data!;
-                          
-                          return SizedBox(
-                            height: 180, // Kartların yüksekliği için sabit bir değer
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: items.length,
-                              itemBuilder: (context, index) {
-                                final item = items[index];
-                                final double currentPrice = item.currentPrice;
-                                final double buyPrice = _buyPrices[item.symbol] ?? 0.0;
-                                final double changePercentage = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
-                                final bool isPositive = changePercentage > 0;
-                                return Container(
-                                  width: MediaQuery.of(context).size.width * 0.43, // Ekranın yaklaşık yarısı kadar genişlik
-                                  margin: EdgeInsets.only(
-                                    right: index < items.length - 1 ? 12.0 : 0.0,
-                                  ),
-                                  child: _buildStockCard(
-                                    symbol: item.symbol,
-                                    name: item.companyName,
-                                    price: currentPrice,
-                                    change: changePercentage,
-                                    isPositive: isPositive,
-                                    logo: 'assets/${item.symbol.toLowerCase()}_logo.png',
-                                    color: _getColorForSymbol(item.symbol),
-                                  ),
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Watchlist Section
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.star_border_rounded, color: primaryColor, size: 24),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Watchlist',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (context) => const WatchlistScreen()),
-                                  );
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'View all',
-                                        style: TextStyle(
-                                          color: primaryColor,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.arrow_forward_ios,
-                                        size: 14,
-                                        color: primaryColor,
-                                      ),
-                                    ],
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Portfolio items...
+                        FutureBuilder<List<PortfolioItemModel>>(
+                          future: _portfolioFuture,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const SizedBox(
+                                height: 150,
+                                child: Center(child: CircularProgressIndicator()),
+                              );
+                            } else if (snapshot.hasError) {
+                              return const SizedBox(
+                                height: 100,
+                                child: Center(
+                                  child: Text(
+                                    'Failed to load portfolio',
+                                    style: TextStyle(color: Colors.red),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Watchlist items...
-                      FutureBuilder<List<WatchlistItemModel>>(
-                        future: _watchlistFuture,
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(32.0),
-                                child: CircularProgressIndicator(),
-                              ),
-                            );
-                          } else if (snapshot.hasError) {
-                            return Center(
-                              child: Text(
-                                'Failed to load watchlist',
-                                style: TextStyle(color: Colors.red[400]),
-                              ),
-                            );
-                          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(vertical: 32),
-                              alignment: Alignment.center,
-                              child: Column(
-                                children: [
-                                  Icon(Icons.star_border_rounded, size: 48, color: Colors.grey[400]),
-                                  const SizedBox(height: 16),
-                                  const Text(
-                                    'No stocks in your watchlist yet',
+                              );
+                            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                              return const SizedBox(
+                                height: 100,
+                                child: Center(
+                                  child: Text(
+                                    'No stocks in your portfolio',
                                     style: TextStyle(fontSize: 16, color: Colors.grey),
-                                    textAlign: TextAlign.center,
                                   ),
-                                  const SizedBox(height: 16),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const StockSearchScreen()),
-                                      ).then((_) {
-                                        _refreshData();
-                                      });
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: primaryColor,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              );
+                            }
+
+                            final items = snapshot.data!;
+                            
+                            return SizedBox(
+                              height: 180, // Kartların yüksekliği için sabit bir değer
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: items.length,
+                                itemBuilder: (context, index) {
+                                  final item = items[index];
+                                  final double currentPrice = item.currentPrice;
+                                  final double buyPrice = _buyPrices[item.symbol] ?? 0.0;
+                                  final double changePercentage = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0.0;
+                                  final bool isPositive = changePercentage > 0;
+                                  return Container(
+                                    width: MediaQuery.of(context).size.width * 0.43, // Ekranın yaklaşık yarısı kadar genişlik
+                                    margin: EdgeInsets.only(
+                                      right: index < items.length - 1 ? 12.0 : 0.0,
                                     ),
-                                    child: const Text('Add Stocks'),
+                                    child: _buildStockCard(
+                                      symbol: item.symbol,
+                                      name: item.companyName,
+                                      price: currentPrice,
+                                      change: changePercentage,
+                                      isPositive: isPositive,
+                                      logo: 'assets/${item.symbol.toLowerCase()}_logo.png',
+                                      color: _getColorForSymbol(item.symbol),
+                                    ),
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Watchlist Section
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.star_border_rounded, color: primaryColor, size: 24),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Watchlist',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
                               ),
-                            );
-                          }
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const WatchlistScreen()),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'View all',
+                                          style: TextStyle(
+                                            color: primaryColor,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.arrow_forward_ios,
+                                          size: 14,
+                                          color: primaryColor,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Watchlist items...
+                        FutureBuilder<List<WatchlistItemModel>>(
+                          future: _watchlistFuture,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(32.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            } else if (snapshot.hasError) {
+                              return Center(
+                                child: Text(
+                                  'Failed to load watchlist',
+                                  style: TextStyle(color: Colors.red[400]),
+                                ),
+                              );
+                            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(vertical: 32),
+                                alignment: Alignment.center,
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.star_border_rounded, size: 48, color: Colors.grey[400]),
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                      'No stocks in your watchlist yet',
+                                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const StockSearchScreen()),
+                                        ).then((_) {
+                                          _refreshData();
+                                        });
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: primaryColor,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      child: const Text('Add Stocks'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
 
-                          final items = snapshot.data!;
-                          // Sadece ilk 2 öğeyi göster
-                          final displayItems = items.take(2).toList();
-                          
-                          return Column(
-                            children: displayItems.map((item) => _buildWatchlistItem(
-                              symbol: item.symbol,
-                              name: item.companyName,
-                              price: item.currentPrice,
-                              change: item.changePercent,
-                              isPositive: item.change > 0,
-                              logo: 'assets/${item.symbol.toLowerCase()}_logo.png',
-                              color: _getColorForSymbol(item.symbol),
-                              sparkline: item.sparkline,
-                            )).toList(),
-                          );
-                        },
-                      ),
-                    ],
+                            final items = snapshot.data!;
+                            // Sadece ilk 2 öğeyi göster
+                            final displayItems = items.take(2).toList();
+                            
+                            return Column(
+                              children: displayItems.map((item) => _buildWatchlistItem(
+                                symbol: item.symbol,
+                                name: item.companyName,
+                                price: item.currentPrice,
+                                change: item.changePercent,
+                                isPositive: item.change > 0,
+                                logo: 'assets/${item.symbol.toLowerCase()}_logo.png',
+                                color: _getColorForSymbol(item.symbol),
+                                sparkline: item.sparkline,
+                              )).toList(),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1099,147 +1262,6 @@ class _HomeScreenState extends State<HomeScreen> {
         return Colors.purple;
     }
   }
-}
-
-class ChartPainter extends CustomPainter {
-  final List<double> data;
-  final Color lineColor;
-  final Color fillColor;
-  final bool showBaseline;
-
-  ChartPainter({
-    required this.data,
-    required this.lineColor,
-    required this.fillColor,
-    this.showBaseline = false,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = lineColor
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final fillPaint = Paint()
-      ..color = fillColor
-      ..style = PaintingStyle.fill;
-
-    if (data.isEmpty) return;
-
-    if (data.length < 2) {
-      // Sadece tek bir veri noktası varsa düz bir çizgi çiz.
-      double value = data.first;
-      double rangeMin = showBaseline ? (value < 0 ? value * 1.2 : 0) : value * 0.8;
-      double rangeMax = showBaseline ? (value > 0 ? value * 1.2 : 0) : value * 1.2;
-
-      // Değer 0 ise, aralığı sıfır etrafında ayarla
-      if (value == 0 && showBaseline) {
-        rangeMin = -1;
-        rangeMax = 1;
-      } else if (rangeMax - rangeMin == 0) {
-        rangeMax += 1; // 0 bölünmesini engelle
-      }
-
-      final double range = rangeMax - rangeMin;
-      final double y = size.height - ((value - rangeMin) / range) * size.height;
-      
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-      
-      // Sıfır çizgisini çiz
-      if (showBaseline) {
-        final baselinePaint = Paint()
-          ..color = Colors.grey.withOpacity(0.3)
-          ..strokeWidth = 1
-          ..style = PaintingStyle.stroke;
-        final baselineY = size.height - ((0 - rangeMin) / range) * size.height;
-        canvas.drawLine(Offset(0, baselineY), Offset(size.width, baselineY), baselinePaint);
-      }
-      return;
-    }
-
-    final double xStep = size.width / (data.length - 1);
-    final double maxValue = data.reduce((curr, next) => curr > next ? curr : next);
-    final double minValue = data.reduce((curr, next) => curr < next ? curr : next);
-    
-    // Kar/zarar grafiği için sıfır çizgisini dahil et
-    double adjustedMinValue = minValue;
-    double adjustedMaxValue = maxValue;
-    
-    if (showBaseline) {
-      adjustedMinValue = minValue < 0 ? minValue : 0;
-      adjustedMaxValue = maxValue > 0 ? maxValue : 0;
-    }
-    
-    final double range = adjustedMaxValue - adjustedMinValue;
-    if (range == 0) return;
-
-    final path = Path();
-    final fillPath = Path();
-
-    // Başlangıç noktası
-    final startY = size.height - ((data[0] - adjustedMinValue) / range) * size.height;
-    path.moveTo(0, startY);
-    
-    final baselineYForFill = size.height - ((0 - adjustedMinValue) / range) * size.height;
-    fillPath.moveTo(0, baselineYForFill);
-    fillPath.lineTo(0, startY);
-
-    // Diğer noktalar
-    for (int i = 1; i < data.length; i++) {
-      final double x = i * xStep;
-      final double y = size.height - ((data[i] - adjustedMinValue) / range) * size.height;
-      path.lineTo(x, y);
-      fillPath.lineTo(x, y);
-    }
-
-    // Dolgu için son noktalar
-    fillPath.lineTo(size.width, baselineYForFill);
-    fillPath.close();
-
-    // Sıfır çizgisini çiz (kar/zarar grafiği için)
-    if (showBaseline) {
-      final baselinePaint = Paint()
-        ..color = Colors.grey.withOpacity(0.3)
-        ..strokeWidth = 1
-        ..style = PaintingStyle.stroke;
-      
-      final baselineY = size.height - ((0 - adjustedMinValue) / range) * size.height;
-      canvas.drawLine(
-        Offset(0, baselineY),
-        Offset(size.width, baselineY),
-        baselinePaint,
-      );
-    }
-
-    // Çizim
-    canvas.drawPath(fillPath, fillPaint);
-    canvas.drawPath(path, paint);
-
-    // Noktalar için
-    final dotPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    final dotFillPaint = Paint()
-      ..color = lineColor
-      ..style = PaintingStyle.fill;
-
-    // Vurgu noktası (son noktadan bir önceki)
-    final highlightIndex = data.length - 5;
-    if (highlightIndex >= 0) {
-      final x = highlightIndex * xStep;
-      final y = size.height - ((data[highlightIndex] - adjustedMinValue) / range) * size.height;
-      
-      canvas.drawCircle(Offset(x, y), 6, dotFillPaint);
-      canvas.drawCircle(Offset(x, y), 6, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 class MiniChartPainter extends CustomPainter {
