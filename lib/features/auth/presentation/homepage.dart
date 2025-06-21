@@ -207,21 +207,10 @@ class HomeService {
       final sparkline = await fetchSparkline(item.symbol);
       item.sparkline.clear();
       item.sparkline.addAll(sparkline);
-      if (sparkline.length >= 2) {
-        final currentPrice = sparkline[0];
-        final previousPrice = sparkline[1];
-        item.currentPrice = currentPrice;
-        item.priceChange = currentPrice - previousPrice;
-        item.priceChangePercentage = previousPrice != 0 ? ((currentPrice - previousPrice) / previousPrice) * 100 : 0.0;
-      } else if (sparkline.isNotEmpty) {
-        item.currentPrice = sparkline[0];
-        item.priceChange = 0.0;
-        item.priceChangePercentage = 0.0;
-      } else {
-        item.currentPrice = 0.0;
-        item.priceChange = 0.0;
-        item.priceChangePercentage = 0.0;
-      }
+      
+      // API'den gelen değerleri kullan, sparkline'dan hesaplama yapma
+      // currentPrice, change ve changePercent zaten API'den geliyor
+      // Sadece sparkline verilerini ekle
     }
     return watchlist;
   }
@@ -852,8 +841,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               symbol: item.symbol,
                               name: item.companyName,
                               price: item.currentPrice,
-                              change: item.priceChangePercentage,
-                              isPositive: item.priceChange > 0,
+                              change: item.changePercent,
+                              isPositive: item.change > 0,
                               logo: 'assets/${item.symbol.toLowerCase()}_logo.png',
                               color: _getColorForSymbol(item.symbol),
                               sparkline: item.sparkline,

@@ -16,6 +16,7 @@ import '../../../core/network/http_interceptor.dart';
 
 class WatchlistService {
   static const _baseUrl = 'http://10.0.2.2:8080';
+  static const _aiBaseUrl = 'http://10.0.2.2:8000';
   static const _watchlistEndpoint = '/api/watchlist';
   static const _recommendationEndpoint = '/api/v1/recommendations/symbol';
 
@@ -55,12 +56,18 @@ class WatchlistService {
 
   Future<Map<String, dynamic>?> fetchRecommendation(String symbol) async {
     final response = await HttpInterceptor.get(
-      Uri.parse('$_baseUrl$_recommendationEndpoint/$symbol'),
+      Uri.parse('$_aiBaseUrl$_recommendationEndpoint/$symbol'),
     );
     
+    // API yanıtını ve durum kodunu konsola yazdır
+    print('--- API Response for $symbol ---');
+    print('Status Code: ${response.statusCode}');
+    print('Body: ${response.body}');
+    print('------------------------------------');
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data;
+      return data['latest_recommendation'];
     } else {
       return null;
     }
@@ -210,6 +217,12 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       Navigator.of(context).pop(); // Close loading dialog
       
       if (recommendation != null) {
+        // Konsola recommendation ve reason yazdırma
+        print('--- Recommendation for $symbol ---');
+        print('Recommendation: ${recommendation['recommendation']}');
+        print('Reason: ${recommendation['reason']}');
+        print('------------------------------------');
+
         showGeneralDialog(
           context: context,
           barrierDismissible: true,
@@ -217,9 +230,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           barrierColor: Colors.black54,
           transitionDuration: const Duration(milliseconds: 300),
           pageBuilder: (context, animation, secondaryAnimation) {
-            return Stack(
-              children: [
-                Container(
+            return Center(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
                   margin: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
@@ -447,7 +461,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     ),
                   ),
                 ),
-              ],
+              ),
             );
           },
           transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -689,7 +703,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     buildDefaultDragHandles: false,
                     itemBuilder: (context, index) {
                       final item = _watchlistItems[index];
-                      final isPositive = item.priceChange >= 0;
+                      final isPositive = item.change >= 0;
                       return Container(
                         key: Key(item.symbol),
                         margin: const EdgeInsets.only(bottom: 10),
@@ -819,7 +833,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                                                     ),
                                                   ),
                                                   Text(
-                                                    '${isPositive ? '+' : ''}${item.priceChangePercentage.toStringAsFixed(2)}%',
+                                                    '${isPositive ? '+' : ''}${item.changePercent.toStringAsFixed(2)}%',
                                                     style: TextStyle(
                                                       color: isPositive ? Colors.green : Colors.red,
                                                       fontWeight: FontWeight.w500,

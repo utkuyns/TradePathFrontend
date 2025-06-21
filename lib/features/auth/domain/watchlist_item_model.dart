@@ -2,16 +2,16 @@ class WatchlistItemModel {
   final String symbol;
   final String companyName;
   double currentPrice;
-  double priceChange;
-  double priceChangePercentage;
+  double change;
+  double changePercent;
   final List<double> sparkline;
 
   WatchlistItemModel({
     required this.symbol,
     required this.companyName,
     required this.currentPrice,
-    required this.priceChange,
-    required this.priceChangePercentage,
+    required this.change,
+    required this.changePercent,
     required this.sparkline,
   });
 
@@ -28,8 +28,8 @@ class WatchlistItemModel {
       symbol: json['symbol'] ?? '',
       companyName: json['companyName'] ?? '',
       currentPrice: safeDouble(json['currentPrice']),
-      priceChange: safeDouble(json['priceChange']),
-      priceChangePercentage: safeDouble(json['priceChangePercentage']),
+      change: safeDouble(json['change']),
+      changePercent: safeDouble(json['changePercent']),
       sparkline: [], // fromJson ile gelmiyor, ayrı çekilecek
     );
   }
